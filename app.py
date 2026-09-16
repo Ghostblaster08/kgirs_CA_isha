@@ -1,0 +1,1540 @@
+"""
+Virtual Laboratory Experiment: Create and Manage a Graph Database
+Developed for Virtual Lab CA / IIT Kharagpur Virtual Labs Style.
+
+A comprehensive, modular laboratory partitioned into 4 core sections:
+  1. Theory: Concepts, architecture, LPG model, Cypher reference, setup, procedure, and terminology.
+  2. Simulation: Interactive Property Graph Sandbox with visual UI controls, embedded Cypher query engine,
+                 real-time Plotly graph visualization, graph metrics, and experimental trial logger.
+  3. Quiz: 12-question self-grading conceptual assessment with immediate pedagogical explanations.
+  4. Report Generation: Student information, recorded trials, graph snapshot, discussion, and downloadable PDF report.
+
+Note: Streamlit-native components are strictly used to render seamlessly in both light and dark themes.
+"""
+
+import os
+import time
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import networkx as nx
+import streamlit as st
+from fpdf import FPDF
+from fpdf.enums import XPos, YPos
+
+# Import embedded in-memory graph engine
+from graph_engine import PropertyGraph, CypherEngine, Node, Relationship
+
+
+# ======================================================================================
+# 1. EXPERIMENT CONFIGURATION & EDUCATIONAL CONTENT
+# ======================================================================================
+
+EXPERIMENT_CONFIG = {
+    "title": "Create and Manage a Graph Database",
+    "course": "Database Management Systems / Advanced Data Systems",
+    "lab_code": "CS-VLAB-08",
+    "objectives": [
+        "Understand the foundational principles of Graph Databases and the Labeled Property Graph (LPG) model.",
+        "Differentiate Graph Databases from Relational Databases (RDBMS) via Index-Free Adjacency (IFA).",
+        "Design, build, and manipulate graph structures consisting of nodes, labels, properties, and directed relationships.",
+        "Master the Cypher Query Language for pattern matching, creation, updates, and deletions (MATCH, CREATE, SET, DELETE, DETACH DELETE).",
+        "Execute single-hop and multi-hop relationship traversals, conditional filtering (WHERE), and aggregations (count, avg).",
+        "Understand real-world graph database architecture, installation procedures (Neo4j Desktop, Docker, AuraDB), and production use cases."
+    ]
+}
+
+THEORY_CONTENT = {
+    "aim": (
+        "To install and configure Neo4j (or an embedded Cypher-compatible engine), model connected domain entities "
+        "using the Labeled Property Graph (LPG) paradigm, perform CRUD operations using the Cypher query language, "
+        "and analyze relationship traversals across interconnected datasets."
+    ),
+    "learning_objectives": EXPERIMENT_CONFIG["objectives"],
+    "introduction": """
+### 1. Introduction to Graph Databases
+A **Graph Database** is a purpose-built NoSQL database management system designed to store, manage, and query 
+highly connected and complex relationship data. Unlike traditional relational database management systems (RDBMS) 
+that organize data into rigid tabular rows and columns connected via foreign keys, graph databases treat 
+**relationships as first-class citizens** stored directly alongside the entities they connect.
+
+Modern applications—ranging from social media friend graphs, enterprise knowledge graphs, biomedical interaction 
+networks, supply-chain logistics, to financial fraud rings—are characterized by dense, deep, and rapidly evolving 
+connections. In these domains, traversing relationships in an RDBMS requires expensive, multi-way `JOIN` operations 
+that experience exponential performance degradation ($O(N^k)$). Graph databases solve this challenge by adopting 
+the **Property Graph Model** combined with **Index-Free Adjacency (IFA)**, enabling constant-time traversal ($O(1)$) 
+per hop regardless of the total volume of data stored in the database.
+    """,
+    "rdbms_vs_graph": """
+### 2. Graph Database vs. Relational Database (RDBMS)
+
+| Feature / Dimension | Relational Database (RDBMS) | Graph Database (Neo4j / Property Graph) |
+| :--- | :--- | :--- |
+| **Primary Data Model** | Tables, Rows (tuples), Columns | Nodes (entities), Directed Relationships (edges) |
+| **Relationship Storage** | Foreign keys & associative join tables | Direct physical memory pointers (Index-Free Adjacency) |
+| **Deep Join Performance** | Degrades exponentially ($O(N^k)$) with join depth | Constant per-hop traversal time ($O(k)$), independent of total DB size |
+| **Schema Flexibility** | Rigid DDL schema; costly schema migrations | Flexible schema / schema-optional; easily evolves |
+| **Query Language** | SQL (Structured Query Language) | Declarative Graph Query Languages (Cypher, GQL) |
+| **Multi-Hop Traversal** | Recursive Common Table Expressions (CTEs) | Intuitive ASCII-art pattern matching `(a)-[:REL*1..3]->(b)` |
+| **Best-Fit Workloads** | Tabular transactions, accounting, structured reporting | Social networks, fraud detection, recommendation engines, knowledge graphs |
+
+#### What is Index-Free Adjacency (IFA)?
+In a relational database, traversing a relationship between two tables requires looking up foreign keys using an index 
+(typically a $B^+$-Tree with $O(\log N)$ search complexity) or performing hash joins. When traversing multiple hops 
+(e.g., *Find friends of friends of Alice*), each hop executes an independent index lookup across millions of records.
+
+In **Neo4j and Native Graph Databases**, each node acts as a direct micro-index to its neighboring nodes. 
+A node record holds direct 64-bit physical memory/disk offsets pointing to its connected relationship records, which in 
+turn point directly to adjacent nodes. Therefore, traversing an edge requires only dereferencing a memory pointer ($O(1)$). 
+The total query execution time is strictly proportional to the **size of the traversed subgraph**, completely independent 
+of whether the entire database contains thousands or billions of nodes!
+    """,
+    "neo4j_architecture": """
+### 3. Neo4j Architecture & Basic Concepts
+Neo4j is the world's leading open-source native property graph database. Its core architecture consists of:
+
+1. **Storage Layer (Native Graph Storage)**:
+   - Neo4j stores graph structures in specialized, fixed-size record files:
+     - `neostore.nodestore.db`: Fixed-length records (15 bytes) storing node in-use flags, pointer to the first relationship, and pointer to the first property.
+     - `neostore.relationshipstore.db`: Fixed-length records (34 bytes) containing pointers to source node, target node, relationship type, previous and next relationships for both source and target nodes (doubly-linked relationship chain).
+     - `neostore.propertystore.db`: Stores primitive properties (strings, integers, floats, booleans, arrays).
+   - Because records are fixed-size, calculating a record's physical file offset is a simple multiplication: $\\text{Offset} = \\text{Record ID} \\times \\text{Record Size}$, enabling instant $O(1)$ random disk access.
+
+2. **Execution Engine (Cypher Runtime)**:
+   - Cypher queries are parsed into Abstract Syntax Trees (AST), validated, optimized by a cost-based query planner, and compiled into an executable pipeline.
+   - Neo4j utilizes Volcano-style iterator models and pipelined batch runtimes to stream results with minimal memory overhead.
+
+3. **Core Property Graph Elements**:
+   - **Nodes**: Discrete domain entities (e.g., a student `Alice`, a course `DBMS`, a department `CSE`). Nodes can possess zero, one, or multiple labels.
+   - **Labels**: Tags used to categorize nodes into semantic groups or roles (e.g., `:Student`, `:Faculty`, `:Person`). Labels serve as entry-point indexes.
+   - **Properties**: Arbitrary key-value pairs associated with either nodes or relationships (e.g., `{name: 'Alice', gpa: 3.85}`).
+   - **Relationships**: Directed connections between two nodes. Every relationship **must have a name/type** (e.g., `[:ENROLLED_IN]`), a designated start node, and an end node. Relationships can also hold properties (e.g., `{semester: '5th', grade: 'Ex'}`).
+   - **Directionality**: While relationships are stored with a definite direction (from start node to end node), Cypher queries can traverse them in outgoing `(a)-[r]->(b)`, incoming `(a)<-[r]-(b)`, or bidirectional / undirected `(a)-[r]-(b)` modes.
+    """,
+    "cypher_crud": """
+### 4. Cypher Query Language & CRUD Operations
+Cypher is a declarative graph query language that utilizes visual, **ASCII-art syntax** to represent graph patterns.
+
+#### Basic Pattern Grammar:
+- **Nodes** are surrounded by parentheses: `(n)`, `(s:Student)`, `(s:Student {name: 'Alice'})`
+- **Relationships** are enclosed in brackets with arrows: `-[r:ENROLLED_IN]->`, `<-[:TEACHES]-`, `-[r]-`
+- **Paths** combine nodes and relationships: `(s:Student)-[:ENROLLED_IN]->(c:Course)`
+
+#### Cypher CRUD Commands:
+1. **CREATE (Create entities and connections)**:
+   ```cypher
+   // Create a new Student node
+   CREATE (s:Student {id: 's_rahul', name: 'Rahul Sen', dept: 'CSE', gpa: 3.82})
+   RETURN s;
+
+   // Create a relationship between existing nodes
+   MATCH (s:Student {id: 's_rahul'}), (c:Course {code: 'CS101'})
+   CREATE (s)-[r:ENROLLED_IN {semester: '1st', grade: 'A'}]->(c)
+   RETURN s, r, c;
+   ```
+
+2. **MATCH & RETURN (Read and pattern search)**:
+   ```cypher
+   // Find all courses a student is enrolled in
+   MATCH (s:Student {name: 'Alice Smith'})-[r:ENROLLED_IN]->(c:Course)
+   RETURN s.name, c.name, r.grade;
+   ```
+
+3. **WHERE (Filtering)**:
+   ```cypher
+   // Filter by numeric threshold and string pattern
+   MATCH (s:Student)-[:ENROLLED_IN]->(c:Course)
+   WHERE s.gpa >= 3.5 AND c.credits >= 4
+   RETURN s.name, s.gpa, c.name, c.credits;
+   ```
+
+4. **SET & REMOVE (Update properties and labels)**:
+   ```cypher
+   // Update property value
+   MATCH (s:Student {id: 's_rahul'})
+   SET s.gpa = 3.90, s.status = 'Dean List'
+   RETURN s;
+   ```
+
+5. **DELETE vs. DETACH DELETE (Delete nodes and relationships)**:
+   - `DELETE n`: Deletes node `n`. **Constraint:** If node `n` has any attached relationships, Neo4j raises a `ConstraintViolationException` to preserve graph referential integrity.
+   - `DETACH DELETE n`: Automatically deletes all incoming and outgoing relationships connected to `n`, then deletes the node itself.
+   ```cypher
+   // Delete relationship only
+   MATCH (s:Student {id: 's_rahul'})-[r:ENROLLED_IN]->(c:Course {code: 'CS101'})
+   DELETE r;
+
+   // Safe deletion of node with relationships
+   MATCH (s:Student {id: 's_rahul'})
+   DETACH DELETE s;
+   ```
+
+6. **Aggregation & Grouping**:
+   ```cypher
+   // Count enrolled students per course (implicit GROUP BY)
+   MATCH (c:Course)<-[:ENROLLED_IN]-(s:Student)
+   RETURN c.name, count(s) AS total_students, avg(s.gpa) AS avg_gpa;
+   ```
+
+7. **Multi-Hop Traversal (Path Finding)**:
+   ```cypher
+   // Two-hop pattern: Find faculty who teach courses attended by Alice
+   MATCH (s:Student {name: 'Alice Smith'})-[:ENROLLED_IN]->(c:Course)<-[:TEACHES]-(f:Faculty)
+   RETURN s.name, c.name, f.name;
+
+   // Variable-length prerequisite chain (1 to 3 hops)
+   MATCH (c1:Course)-[:PREREQUISITE_OF*1..3]->(c2:Course)
+   RETURN c1.name, c2.name;
+   ```
+    """,
+    "setup_procedure": """
+### 5. Prerequisites and Neo4j Installation Procedure
+
+#### Prerequisites:
+- **Java Virtual Machine (JVM)**: Java 17 LTS or Java 21 LTS (OpenJDK, Eclipse Temurin, or Oracle JDK).
+- **Hardware**: Minimum 4 GB RAM (8 GB+ recommended), 64-bit OS (Windows, Linux, or macOS).
+
+#### Deployment Options:
+
+* **Option A: Neo4j Desktop (Recommended for GUI Learners)**
+  1. Download **Neo4j Desktop** from [https://neo4j.com/download/](https://neo4j.com/download/).
+  2. Install and launch the application. Create a new Project and click **Add -> Local DBMS**.
+  3. Set a secure password for the default `neo4j` user and select Neo4j version `5.x`.
+  4. Click **Start** to run the database server.
+  5. Click **Open** to launch the integrated **Neo4j Browser** at `http://localhost:7474`.
+
+* **Option B: Docker Container (Recommended for Developers & Labs)**
+  Execute the following command in PowerShell or Terminal:
+  ```powershell
+  docker run -d `
+    --name neo4j-vlab `
+    -p 7474:7474 -p 7687:7687 `
+    -e NEO4J_AUTH=neo4j/SecretPassword123 `
+    -v neo4j_data:/data `
+    neo4j:5.18.0
+  ```
+  - Port `7474`: HTTP web interface (Neo4j Browser).
+  - Port `7687`: Bolt binary protocol for driver connections (Python, Java, Node.js).
+
+* **Option C: Neo4j AuraDB (Free Cloud Instance)**
+  1. Navigate to [https://neo4j.com/cloud/aura/](https://neo4j.com/cloud/aura/) and register for a free AuraDB Free instance.
+  2. Save your generated database credentials (`neo4j+s://...`).
+  3. Connect directly via the cloud-hosted Neo4j Workspace in your browser.
+
+* **Option D: Cypher Shell (Command-Line Interface)**
+  Launch the CLI client to execute queries interactively or run `.cypher` batch scripts:
+  ```bash
+  cypher-shell -u neo4j -p SecretPassword123
+  ```
+    """,
+    "procedure": [
+        "Step 1: Review the theoretical framework, LPG model, and Cypher syntax conventions.",
+        "Step 2: Navigate to the 'Simulation' section from the left navigation menu.",
+        "Step 3: Select and load a domain preset graph (e.g., University Academic Graph) or start with a blank graph.",
+        "Step 4: Use the Visual Graph Builder tabs to create at least one new node (e.g., Student or Course) and one directed relationship.",
+        "Step 5: Switch to the Cypher Query Editor tab. Load and execute pre-built example queries (MATCH, WHERE, aggregations).",
+        "Step 6: Write custom Cypher queries to perform property updates (SET) and deletion (DETACH DELETE).",
+        "Step 7: Inspect the real-time Plotly graph visualization and observe matched node highlighting.",
+        "Step 8: Click 'Record Current State / Action' in the Data Log Book to log experimental trials.",
+        "Step 9: Complete the 12-question Concept Assessment Quiz to test your graph database mastery.",
+        "Step 10: Open 'Report Generation', enter your student credentials and analytical observations, and export your official PDF lab report."
+    ],
+    "precautions": """
+### 6. Precautions & Common Mistakes in Graph Databases
+
+1. **Attempting DELETE on Connected Nodes**:
+   - Running `DELETE n` on a node with existing relationships triggers a referential constraint violation. Always use `DETACH DELETE n` if you intend to remove the node along with its connections.
+2. **Unintended Cartesian Products in MATCH**:
+   - Writing disconnected MATCH patterns like `MATCH (a:Student), (b:Course) RETURN a, b` computes an exhaustive Cartesian product of every student paired with every course ($O(V_1 \\times V_2)$). Always specify relationship patterns between entities: `MATCH (a)-[:ENROLLED_IN]->(b)`.
+3. **Case Sensitivity in Cypher**:
+   - Cypher keywords (`MATCH`, `WHERE`, `RETURN`) are case-insensitive, but **node labels** (`:Student`), **relationship types** (`[:ENROLLED_IN]`), and **property keys** (`name`, `gpa`) are strictly case-sensitive!
+4. **Neglecting Relationship Directionality**:
+   - Queries with directed arrows `(a)-[:REL]->(b)` will only return paths matching that exact traversal direction. Use undirected patterns `(a)-[:REL]-(b)` when bidirectional traversals are desired.
+5. **Over-Indexing vs. Traversal**:
+   - In graph databases, indexes should be created primarily on lookup properties (like student ID or email) to find initial starting nodes. Do not index relationships; graph traversal pointers (IFA) already provide instant traversal.
+    """,
+    "key_terms": {
+        "Node (Vertex)": "A fundamental graph entity representing a distinct object (e.g., Student, Faculty, Course).",
+        "Label": "A semantic tag applied to nodes for categorization, schema definition, and indexing (e.g., :Student, :Person).",
+        "Relationship (Edge)": "A directed connection between two nodes with a mandatory type and direction (e.g., [:ENROLLED_IN]).",
+        "Property": "A key-value attribute associated with a node or relationship (e.g., gpa: 3.85, credits: 4).",
+        "Index-Free Adjacency (IFA)": "Architecture where nodes hold direct physical memory pointers to adjacent relationships and nodes, ensuring O(1) traversal.",
+        "Cypher": "The declarative, ASCII-art pattern matching query language used by Neo4j and standardized under openCypher / GQL.",
+        "DETACH DELETE": "A Cypher operation that safely deletes a node by first stripping all connected incoming and outgoing relationships.",
+        "Degree of a Node": "The total number of relationships connected to a node (Degree = In-Degree + Out-Degree).",
+        "Graph Density": "Ratio of existing relationships to the maximum possible directed relationships between nodes: D = E / (V * (V - 1)).",
+        "Path": "A continuous alternating sequence of nodes and relationships connecting a start node to an end node.",
+        "Multi-Hop Traversal": "A query path that navigates across two or more consecutive relationships (e.g., (a)-[]->(b)-[]->(c)).",
+        "Isolated Node": "A node having a degree of zero (no incoming and no outgoing relationships)."
+    }
+}
+
+# ======================================================================================
+# 2. CONCEPT ASSESSMENT QUIZ (12 RIGOROUS QUESTIONS)
+# ======================================================================================
+
+QUIZ_QUESTIONS = [
+    {
+        "id": 1,
+        "question": "What core architectural feature enables graph databases to achieve constant-time O(1) traversal per hop, unlike RDBMS multi-table joins?",
+        "options": [
+            "A) Distributed B-Tree indexes on foreign keys",
+            "B) Index-Free Adjacency (IFA) using direct physical memory pointers",
+            "C) Precomputed materialized relational views",
+            "D) Columnar compressed storage files"
+        ],
+        "answer_index": 1,
+        "explanation": "Index-Free Adjacency (IFA) means every node stores direct physical memory pointers to its adjacent relationships, allowing traversal in O(1) time without index searches."
+    },
+    {
+        "id": 2,
+        "question": "In the Neo4j Labeled Property Graph (LPG) model, which of the following statements regarding relationships is FALSE?",
+        "options": [
+            "A) Every relationship must have a start node and an end node",
+            "B) Every relationship must have a specific type (e.g., [:ENROLLED_IN])",
+            "C) Relationships can hold key-value properties just like nodes",
+            "D) Relationships can exist as dangling pointers without a target node"
+        ],
+        "answer_index": 3,
+        "explanation": "Relationships in Neo4j are strictly first-class directed connections. They can never exist as dangling pointers without both a valid source and target node."
+    },
+    {
+        "id": 3,
+        "question": "Which Cypher pattern correctly matches a Student named 'Alice' who is enrolled in any Course?",
+        "options": [
+            "A) SELECT Student WHERE name='Alice' JOIN Course",
+            "B) MATCH (s:Student {name: 'Alice'})-[:ENROLLED_IN]->(c:Course) RETURN s, c",
+            "C) FIND (s:Student)-[ENROLLED_IN]->(c:Course) FILTER s.name = 'Alice'",
+            "D) MATCH {s:Student} --> {c:Course} WHERE name = 'Alice'"
+        ],
+        "answer_index": 1,
+        "explanation": "Cypher uses ASCII-art syntax: nodes are enclosed in parentheses '(s:Student)' and directed relationships in bracketed arrows '-[:ENROLLED_IN]->'."
+    },
+    {
+        "id": 4,
+        "question": "What happens if you execute 'MATCH (n:Student {id: 'S01'}) DELETE n' when node 'S01' currently has 3 active relationships?",
+        "options": [
+            "A) The node and its 3 relationships are automatically deleted without error",
+            "B) The 3 relationships are preserved as dangling pointers with null sources",
+            "C) Neo4j throws a ConstraintViolationException preventing deletion to preserve referential integrity",
+            "D) The node is deleted and the target nodes are also recursively deleted"
+        ],
+        "answer_index": 2,
+        "explanation": "To preserve graph referential integrity, plain DELETE fails if relationships are attached. 'DETACH DELETE' must be explicitly used to remove attached relationships first."
+    },
+    {
+        "id": 5,
+        "question": "What is the primary operational role of 'Labels' attached to nodes in Neo4j?",
+        "options": [
+            "A) To store arbitrary floating-point numeric measurements",
+            "B) To categorize nodes into domain groups and act as entry-point indexes for fast query lookup",
+            "C) To define foreign key cascade rules between tables",
+            "D) Labels are purely cosmetic and have no execution impact"
+        ],
+        "answer_index": 1,
+        "explanation": "Labels group nodes into semantic roles (e.g., :Student, :Faculty) and allow Neo4j to index and rapidly locate starting nodes for graph traversals."
+    },
+    {
+        "id": 6,
+        "question": "Which Cypher statement correctly updates the GPA of student 'Alice' to 3.95 and adds an 'honors' property?",
+        "options": [
+            "A) UPDATE (s:Student {name: 'Alice'}) SET gpa = 3.95, honors = true",
+            "B) MATCH (s:Student {name: 'Alice'}) SET s.gpa = 3.95, s.honors = true RETURN s",
+            "C) MODIFY Student Alice (gpa: 3.95, honors: true)",
+            "D) ALTER NODE (s:Student) WHERE name='Alice' ADD gpa=3.95"
+        ],
+        "answer_index": 1,
+        "explanation": "In Cypher, property updates are performed using the 'SET' clause following a 'MATCH' pattern: 'MATCH (s) SET s.prop = val'."
+    },
+    {
+        "id": 7,
+        "question": "In Cypher, what is the behavior of the aggregation function 'count(s)' in 'MATCH (c:Course)<-[:ENROLLED_IN]-(s:Student) RETURN c.name, count(s)'?",
+        "options": [
+            "A) It throws a syntax error because Cypher requires an explicit 'GROUP BY' clause",
+            "B) It automatically groups by non-aggregated fields (c.name) and counts students per course",
+            "C) It counts all students in the database regardless of course",
+            "D) It only counts courses, ignoring students completely"
+        ],
+        "answer_index": 1,
+        "explanation": "Unlike SQL, Cypher has implicit grouping: any non-aggregated expressions in the RETURN clause (such as c.name) automatically serve as grouping keys."
+    },
+    {
+        "id": 8,
+        "question": "What does the variable-length Cypher relationship pattern '-[:PREREQUISITE_OF*1..3]->' express?",
+        "options": [
+            "A) A relationship whose weight is between 1.0 and 3.0",
+            "B) A path of between 1 and 3 sequential PREREQUISITE_OF hops between entities",
+            "C) A relationship that must be traversed exactly 3 times in a loop",
+            "D) An array of 3 distinct relationship property keys"
+        ],
+        "answer_index": 1,
+        "explanation": "Syntax '*minHops..maxHops' specifies variable-length path traversal. '*1..3' searches for paths having from 1 up to 3 consecutive relationship hops."
+    },
+    {
+        "id": 9,
+        "question": "In which scenario would a Relational Database (RDBMS) typically outperform a Graph Database?",
+        "options": [
+            "A) Finding mutual friends across 6 degrees of separation in a social network",
+            "B) Detecting circular money laundering rings across transaction accounts",
+            "C) Sequential bulk aggregations across millions of independent, flat accounting records",
+            "D) Finding shortest paths through an international airline flight network"
+        ],
+        "answer_index": 2,
+        "explanation": "Relational databases and columnar engines excel at bulk, linear scans and aggregations across flat tables with minimal inter-record joins, whereas graph databases excel at complex, multi-hop relationship traversals."
+    },
+    {
+        "id": 10,
+        "question": "Why is the query 'MATCH (s:Student), (c:Course) RETURN s, c' generally discouraged unless explicitly intended?",
+        "options": [
+            "A) Because it causes a syntax error in Cypher",
+            "B) Because it produces an unconstrained Cartesian product matching every student with every course",
+            "C) Because it automatically deletes all students and courses",
+            "D) Because it forces the database to convert into an RDBMS table"
+        ],
+        "answer_index": 1,
+        "explanation": "Matching disconnected entities without relationship patterns calculates a full Cartesian product (O(|V1| * |V2|)), which can consume massive memory on large graphs."
+    },
+    {
+        "id": 11,
+        "question": "Which of the following describes the default network port used for Bolt protocol driver communication in Neo4j?",
+        "options": [
+            "A) Port 7474 (HTTP Browser interface)",
+            "B) Port 7687 (Bolt binary protocol)",
+            "C) Port 3306 (MySQL default port)",
+            "D) Port 5432 (PostgreSQL default port)"
+        ],
+        "answer_index": 1,
+        "explanation": "Neo4j uses port 7474 for HTTP / Neo4j Browser access, and port 7687 for high-performance Bolt binary protocol connections utilized by official drivers."
+    },
+    {
+        "id": 12,
+        "question": "According to Cypher naming conventions and syntax standards, how should relationship types and node labels be cased?",
+        "options": [
+            "A) Labels in UPPER_CASE and Relationships in lower_case",
+            "B) Labels in UpperCamelCase (e.g., :Student) and Relationships in UPPER_SNAKE_CASE (e.g., [:ENROLLED_IN])",
+            "C) Both labels and relationships must always be lowercase",
+            "D) Cypher forbids the use of underscores in relationship types"
+        ],
+        "answer_index": 1,
+        "explanation": "Cypher naming conventions dictate UpperCamelCase for Node Labels (e.g. :Student, :Course) and UPPER_SNAKE_CASE for Relationship Types (e.g. [:ENROLLED_IN], [:TEACHES])."
+    }
+]
+
+
+# ======================================================================================
+# 3. LAB REPORT PDF EXPORTER
+# ======================================================================================
+
+class LabReportPDF(FPDF):
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 8)
+        self.set_text_color(120, 130, 140)
+        self.cell(0, 10, f"Page {self.page_no()} | Virtual Laboratory CA - Neo4j Graph Database Experiment", align="C")
+
+
+def generate_pdf_report(student_name: str, student_id: str, date_str: str,
+                        trials_df: pd.DataFrame, quiz_score: int, quiz_total: int,
+                        student_notes: str, graph_metrics: Dict[str, Any]) -> bytes:
+    """Compiles experiment benchmark records into an official, publication-quality PDF report."""
+    pdf = LabReportPDF()
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.add_page()
+
+    # Document Header
+    pdf.set_text_color(15, 23, 42)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 8, EXPERIMENT_CONFIG["title"], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(37, 99, 235)
+    pdf.cell(0, 6, f"{EXPERIMENT_CONFIG['course']} | Course Code: {EXPERIMENT_CONFIG['lab_code']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(3)
+
+    # Student & Session Info Box
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_draw_color(203, 213, 225)
+    pdf.rect(10, 27, 190, 22, "FD")
+
+    pdf.set_xy(14, 29)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(38, 5, "Student Name:", new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(57, 5, student_name or "N/A", new_x=XPos.RIGHT, new_y=YPos.TOP)
+
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(35, 5, "Roll / ID Number:", new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(50, 5, student_id or "N/A", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    pdf.set_xy(14, 38)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(38, 5, "Experiment Date:", new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(57, 5, date_str or datetime.now().strftime("%Y-%m-%d"), new_x=XPos.RIGHT, new_y=YPos.TOP)
+
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(35, 5, "Quiz Evaluation:", new_x=XPos.RIGHT, new_y=YPos.TOP)
+    pdf.set_font("Helvetica", "B", 9)
+    pct = int((quiz_score / quiz_total) * 100 if quiz_total else 0)
+    if pct >= 50:
+        pdf.set_text_color(16, 185, 129)
+    else:
+        pdf.set_text_color(239, 68, 68)
+    pdf.cell(50, 5, f"{quiz_score} / {quiz_total} ({pct}%)", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    pdf.ln(12)
+
+    # 1. Learning Objectives
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(0, 7, "1. Experiment Objectives & Aim", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", "", 8.5)
+    pdf.set_text_color(51, 65, 85)
+    for obj in EXPERIMENT_CONFIG["objectives"]:
+        clean_obj = str(obj).replace("$", "").replace("\\", "")
+        pdf.cell(5, 4.5, "-", new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.cell(0, 4.5, f" {clean_obj}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(4)
+
+    # 2. Final Graph Snapshot & Metrics
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(0, 7, "2. Final Graph State & Metric Summary", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(30, 41, 59)
+
+    summary_text = (
+        f"Total Nodes: {graph_metrics.get('num_nodes', 0)}   |   "
+        f"Total Relationships: {graph_metrics.get('num_relationships', 0)}   |   "
+        f"Labels: {', '.join(graph_metrics.get('labels', [])) or 'None'}\n"
+        f"Rel Types: {', '.join(graph_metrics.get('rel_types', [])) or 'None'}   |   "
+        f"Graph Density: {graph_metrics.get('density', 0.0)}   |   "
+        f"Average Degree: {graph_metrics.get('avg_degree', 0.0)}"
+    )
+    pdf.multi_cell(0, 5, summary_text)
+    pdf.ln(4)
+
+    # 3. Recorded Trials Table
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(0, 7, "3. Recorded Experimental Trials & Execution Log", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    if trials_df.empty:
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.set_text_color(100, 116, 139)
+        pdf.cell(0, 6, "No experimental simulation trials recorded during this session.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    else:
+        pdf.set_fill_color(37, 99, 235)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 8)
+
+        # Fixed column widths matching 190 mm
+        col_widths = {
+            "Trial #": 14,
+            "Operation": 28,
+            "Query / Action": 68,
+            "Result": 42,
+            "Status": 18,
+            "Timestamp": 20
+        }
+
+        # Header
+        for c in trials_df.columns:
+            w = col_widths.get(c, 25)
+            pdf.cell(w, 6, str(c)[:16], border=1, align="C", fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.ln()
+
+        # Rows
+        pdf.set_fill_color(248, 250, 252)
+        pdf.set_text_color(30, 41, 59)
+        pdf.set_font("Helvetica", "", 7.5)
+        fill = False
+
+        for _, row in trials_df.iterrows():
+            for c in trials_df.columns:
+                w = col_widths.get(c, 25)
+                val_str = str(row[c])
+                pdf.cell(w, 5, val_str[:38], border=1, align="C", fill=fill, new_x=XPos.RIGHT, new_y=YPos.TOP)
+            pdf.ln()
+            fill = not fill
+
+    pdf.ln(5)
+
+    # 4. Student Discussion & Observations
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(0, 7, "4. Student Observations & Analytical Discussion", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(51, 65, 85)
+    notes_text = student_notes.strip() if student_notes.strip() else (
+        "The graph database experiment successfully demonstrated node and relationship creation, "
+        "Cypher pattern matching, property updates, and referential constraints (DETACH DELETE). "
+        "Graph traversal queries executed with high efficiency without requiring relational table joins."
+    )
+    pdf.multi_cell(0, 5, notes_text)
+    pdf.ln(8)
+
+    # Sign-off line
+    pdf.set_draw_color(180, 180, 180)
+    pdf.line(130, pdf.get_y() + 15, 190, pdf.get_y() + 15)
+    pdf.set_xy(130, pdf.get_y() + 17)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(60, 4, "Instructor / Student Signature", align="C")
+
+    return bytes(pdf.output())
+
+
+# ======================================================================================
+# 4. PLOTLY GRAPH VISUALIZER
+# ======================================================================================
+
+LABEL_COLORS = {
+    "Student": "#2563EB",       # Blue
+    "Course": "#F59E0B",        # Amber
+    "Faculty": "#10B981",       # Emerald Green
+    "Department": "#8B5CF6",    # Purple
+    "Person": "#06B6D4",        # Cyan
+    "Group": "#EC4899",         # Pink
+    "Topic": "#14B8A6",         # Teal
+    "Account": "#EF4444",       # Red
+    "Device": "#64748B",        # Slate
+    "IPAddress": "#F97316"      # Orange
+}
+DEFAULT_NODE_COLOR = "#6366F1"  # Indigo
+
+
+def render_graph_figure(graph: PropertyGraph,
+                         matched_node_ids: Optional[List[str]] = None,
+                         matched_rel_ids: Optional[List[str]] = None,
+                         layout_algorithm: str = "Spring (Force-Directed)",
+                         node_label_mode: str = "Name / Label") -> go.Figure:
+    """
+    Renders an interactive 2D graph visualization using NetworkX for layout
+    and Plotly for interactive rendering with hovercards and arrows.
+    """
+    fig = go.Figure()
+
+    if not graph.nodes:
+        fig.add_annotation(
+            text="Graph is currently empty. Add nodes or load a preset dataset!",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=14, color="#64748B")
+        )
+        fig.update_layout(
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            height=500,
+            margin=dict(l=20, r=20, t=30, b=20)
+        )
+        return fig
+
+    # Build NetworkX representation for coordinates
+    G = graph.to_networkx()
+
+    # Layout computation
+    n_count = len(G.nodes())
+    if layout_algorithm == "Circular":
+        pos = nx.circular_layout(G)
+    elif layout_algorithm == "Kamada-Kawai":
+        try:
+            pos = nx.kamada_kawai_layout(G)
+        except Exception:
+            pos = nx.spring_layout(G, seed=42, k=max(0.6, 2.5 / np.sqrt(max(1, n_count))))
+    elif layout_algorithm == "Shell":
+        # Group by first label
+        label_groups = {}
+        for nid, node in graph.nodes.items():
+            primary_lbl = sorted(list(node.labels))[0] if node.labels else "Default"
+            label_groups.setdefault(primary_lbl, []).append(nid)
+        pos = nx.shell_layout(G, nlist=list(label_groups.values()))
+    else:  # Default Spring
+        pos = nx.spring_layout(G, seed=42, k=max(0.7, 3.0 / np.sqrt(max(1, n_count))), iterations=60)
+
+    matched_nids_set = set(matched_node_ids) if matched_node_ids else set()
+    matched_rids_set = set(matched_rel_ids) if matched_rel_ids else set()
+
+    # 1. Edge Line Traces
+    edge_x = []
+    edge_y = []
+    mid_x = []
+    mid_y = []
+    mid_text = []
+    mid_hover = []
+    mid_color = []
+
+    for rid, rel in graph.relationships.items():
+        if rel.source not in pos or rel.target not in pos:
+            continue
+        x0, y0 = pos[rel.source]
+        x1, y1 = pos[rel.target]
+
+        # Line segment
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+
+        # Directional point (at 65% distance)
+        mx = x0 + 0.65 * (x1 - x0)
+        my = y0 + 0.65 * (y1 - y0)
+        mid_x.append(mx)
+        mid_y.append(my)
+
+        is_matched = rid in matched_rids_set
+        color = "#EAB308" if is_matched else "#64748B"
+        mid_color.append(color)
+
+        mid_text.append(f"{rel.type}")
+
+        prop_str = "<br>".join([f"&nbsp;&nbsp;{k}: <b>{v}</b>" for k, v in rel.properties.items()])
+        hover_info = (
+            f"<b>Relationship:</b> {rel.type}<br>"
+            f"<b>ID:</b> {rel.id}<br>"
+            f"<b>Source:</b> {rel.source} &rarr; <b>Target:</b> {rel.target}"
+        )
+        if prop_str:
+            hover_info += f"<br><b>Properties:</b><br>{prop_str}"
+        mid_hover.append(hover_info)
+
+    # Base Edge Lines
+    fig.add_trace(go.Scatter(
+        x=edge_x, y=edge_y,
+        mode="lines",
+        line=dict(width=1.5, color="#94A3B8"),
+        hoverinfo="none",
+        showlegend=False
+    ))
+
+    # Relationship Labels & Direction Indicators
+    if mid_x:
+        fig.add_trace(go.Scatter(
+            x=mid_x, y=mid_y,
+            mode="text+markers",
+            marker=dict(size=8, symbol="triangle-up", color=mid_color),
+            text=mid_text,
+            textposition="top center",
+            textfont=dict(size=9, color="#475569", family="sans-serif"),
+            hoverinfo="text",
+            hovertext=mid_hover,
+            showlegend=False
+        ))
+
+    # 2. Node Traces (Grouped by Primary Label for clean legend)
+    nodes_by_label: Dict[str, List[str]] = {}
+    for nid, node in graph.nodes.items():
+        primary_label = sorted(list(node.labels))[0] if node.labels else "Entity"
+        nodes_by_label.setdefault(primary_label, []).append(nid)
+
+    for label_name, nids in nodes_by_label.items():
+        nx_coords = []
+        ny_coords = []
+        hover_texts = []
+        display_texts = []
+        sizes = []
+        line_widths = []
+        line_colors = []
+
+        base_color = LABEL_COLORS.get(label_name, DEFAULT_NODE_COLOR)
+
+        for nid in nids:
+            if nid not in pos:
+                continue
+            x, y = pos[nid]
+            nx_coords.append(x)
+            ny_coords.append(y)
+
+            node = graph.nodes[nid]
+            is_matched = nid in matched_nids_set
+
+            # Sizing & Highlights
+            if is_matched:
+                sizes.append(30)
+                line_widths.append(3.5)
+                line_colors.append("#EAB308")  # Gold Highlight
+            else:
+                sizes.append(22)
+                line_widths.append(1.5)
+                line_colors.append("#FFFFFF")
+
+            # Display text
+            if node_label_mode == "Name / Label":
+                display_texts.append(f"{node.display_name()}\n(:{label_name})")
+            elif node_label_mode == "Name Only":
+                display_texts.append(node.display_name())
+            elif node_label_mode == "Node ID":
+                display_texts.append(nid)
+            elif node_label_mode == "Label Only":
+                display_texts.append(f":{label_name}")
+            else:
+                display_texts.append("")
+
+            # Hover information
+            labels_str = ":" + ":".join(sorted(node.labels))
+            prop_lines = "<br>".join([f"&nbsp;&nbsp;{k}: <b>{v}</b>" for k, v in node.properties.items()])
+            hover = (
+                f"<b>Node:</b> {nid}<br>"
+                f"<b>Labels:</b> <code>{labels_str}</code>"
+            )
+            if prop_lines:
+                hover += f"<br><b>Properties:</b><br>{prop_lines}"
+            hover_texts.append(hover)
+
+        fig.add_trace(go.Scatter(
+            x=nx_coords, y=ny_coords,
+            mode="markers+text",
+            name=f":{label_name} ({len(nids)})",
+            marker=dict(
+                size=sizes,
+                color=base_color,
+                line=dict(width=line_widths, color=line_colors)
+            ),
+            text=display_texts,
+            textposition="bottom center",
+            textfont=dict(size=10, color="#1E293B"),
+            hoverinfo="text",
+            hovertext=hover_texts
+        ))
+
+    # Matched highlight legend indicator if any
+    if matched_node_ids:
+        fig.add_annotation(
+            text=f"Matched Subgraph: {len(matched_node_ids)} Node(s) highlighted in Gold",
+            xref="paper", yref="paper",
+            x=0.02, y=0.98, showarrow=False,
+            bgcolor="#FEF08A",
+            font=dict(size=11, color="#854D0E"),
+            bordercolor="#FACC15",
+            borderwidth=1,
+            borderpad=4
+        )
+
+    fig.update_layout(
+        title=dict(text="Interactive Labeled Property Graph View", font=dict(size=14)),
+        hovermode="closest",
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        height=540,
+        margin=dict(l=15, r=15, t=40, b=20),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
+
+    return fig
+
+
+# ======================================================================================
+# 5. SECTION RENDERERS
+# ======================================================================================
+
+def render_theory_section():
+    """Renders Section 1: Theory, Background, Architecture, Cypher, and Procedure."""
+    st.header("Theoretical Framework: Graph Databases & Neo4j")
+
+    st.subheader("Aim & Objective")
+    st.markdown(f"> **Aim:** {THEORY_CONTENT['aim']}")
+
+    st.subheader("Learning Objectives")
+    for i, obj in enumerate(THEORY_CONTENT["learning_objectives"]):
+        st.write(f"- **Objective {i+1}**: {obj}")
+
+    st.divider()
+    st.markdown(THEORY_CONTENT["introduction"])
+    st.markdown(THEORY_CONTENT["rdbms_vs_graph"])
+    st.markdown(THEORY_CONTENT["neo4j_architecture"])
+    st.markdown(THEORY_CONTENT["cypher_crud"])
+    st.markdown(THEORY_CONTENT["setup_procedure"])
+
+    st.divider()
+    st.subheader("Step-by-Step Experimental Procedure")
+    for step in THEORY_CONTENT["procedure"]:
+        st.write(f"- {step}")
+
+    st.divider()
+    st.markdown(THEORY_CONTENT["precautions"])
+
+    st.divider()
+    with st.expander("Comprehensive Key Terminology Reference (Glossary)"):
+        glossary_df = pd.DataFrame(
+            list(THEORY_CONTENT["key_terms"].items()),
+            columns=["Term", "Formal Definition & Operational Role"]
+        )
+        st.table(glossary_df)
+
+
+def render_simulation_section():
+    """Renders Section 2: Interactive Graph Sandbox, Visual UI Controls, Cypher Console, Visualizer & Logger."""
+    st.header("Interactive Graph Database Sandbox (Simulation)")
+    st.info(
+        "Explore graph database management using the embedded in-memory Cypher engine. "
+        "Create entities visually or write native Cypher queries to build, manipulate, and analyze the graph."
+    )
+
+    graph: PropertyGraph = st.session_state["graph"]
+    engine: CypherEngine = st.session_state["cypher_engine"]
+
+    # Top Control Bar: Presets and Reset
+    col_preset1, col_preset2, col_reset = st.columns([2.5, 1.5, 1.2])
+
+    with col_preset1:
+        preset_choice = st.selectbox(
+            "Load Domain Graph Preset:",
+            options=[
+                "University Academic Knowledge Graph (Default)",
+                "Social Network & Friendships",
+                "Financial Fraud Detection Ring",
+                "Blank / Empty Graph"
+            ],
+            index=st.session_state.get("preset_index", 0)
+        )
+
+    with col_preset2:
+        st.write("")
+        st.write("")
+        if st.button("Load Selected Preset", use_container_width=True):
+            if preset_choice.startswith("University"):
+                graph.load_university_graph()
+                st.session_state["preset_index"] = 0
+            elif preset_choice.startswith("Social"):
+                graph.load_social_graph()
+                st.session_state["preset_index"] = 1
+            elif preset_choice.startswith("Financial"):
+                graph.load_fraud_graph()
+                st.session_state["preset_index"] = 2
+            else:
+                graph.clear()
+                st.session_state["preset_index"] = 3
+
+            st.session_state["matched_node_ids"] = []
+            st.session_state["matched_rel_ids"] = []
+            st.session_state["last_cypher_result"] = None
+            st.toast(f"Loaded '{preset_choice}' successfully!")
+            st.rerun()
+
+    with col_reset:
+        st.write("")
+        st.write("")
+        if st.button("Reset Graph", type="secondary", use_container_width=True):
+            graph.clear()
+            st.session_state["matched_node_ids"] = []
+            st.session_state["matched_rel_ids"] = []
+            st.session_state["last_cypher_result"] = None
+            st.toast("Graph has been cleared to empty state.")
+            st.rerun()
+
+    # Graph Metrics Row
+    metrics = graph.get_metrics()
+    m1, m2, m3, m4, m5 = st.columns(5)
+    with m1:
+        st.metric("Total Nodes", f"{metrics['num_nodes']}")
+    with m2:
+        st.metric("Relationships", f"{metrics['num_relationships']}")
+    with m3:
+        st.metric("Distinct Labels", f"{metrics['num_labels']}")
+    with m4:
+        st.metric("Rel Types", f"{metrics['num_rel_types']}")
+    with m5:
+        st.metric("Graph Density", f"{metrics['density']}")
+
+    st.divider()
+
+    # Main Interactive Tabs: UI Builder vs Cypher Editor
+    tab_cypher, tab_builder = st.tabs([
+        "Cypher Query Editor & Console",
+        "Visual Graph Builder (UI Controls)"
+    ])
+
+    # ----------------------------------------------------------------------------------
+    # TAB 1: CYPHER QUERY CONSOLE
+    # ----------------------------------------------------------------------------------
+    with tab_cypher:
+        st.subheader("Cypher Query Execution Console")
+        st.caption("Execute declarative Cypher queries against the in-memory graph. Supported: MATCH, CREATE, SET, DELETE, DETACH DELETE, WHERE, aggregations.")
+
+        cypher_examples = {
+            "-- Select an Educational Cypher Example --": "",
+            "1. Match all nodes and inspect entire graph": "MATCH (n) RETURN n",
+            "2. Match enrolled students and their courses": "MATCH (s:Student)-[:ENROLLED_IN]->(c:Course) RETURN s.name, c.name, s.gpa",
+            "3. Filter high-performing students (WHERE clause)": "MATCH (s:Student) WHERE s.gpa >= 3.5 RETURN s.name, s.dept, s.gpa",
+            "4. Multi-hop traversal: Faculty teaching enrolled students": "MATCH (f:Faculty)-[:TEACHES]->(c:Course)<-[:ENROLLED_IN]-(s:Student) RETURN f.name, c.name, s.name",
+            "5. Aggregate enrollment counts per course (count)": "MATCH (c:Course)<-[:ENROLLED_IN]-(s:Student) RETURN c.name, count(s) AS total_enrolled",
+            "6. Prerequisite chain traversal (Course -> Course)": "MATCH (c1:Course)-[:PREREQUISITE_OF]->(c2:Course) RETURN c1.name, c2.name",
+            "7. CREATE a new Student node": "CREATE (s:Student {id: 's_kiran', name: 'Kiran Patel', dept: 'CSE', gpa: 3.78}) RETURN s",
+            "8. Connect new Student to Course (CREATE relationship)": "MATCH (s:Student {id: 's_kiran'}), (c:Course {name: 'Database Management Systems'}) CREATE (s)-[:ENROLLED_IN {grade: 'A', semester: '5th'}]->(c) RETURN s, c",
+            "9. Update student GPA using SET": "MATCH (s:Student {id: 's_kiran'}) SET s.gpa = 3.92 RETURN s",
+            "10. Safely remove student using DETACH DELETE": "MATCH (s:Student {id: 's_kiran'}) DETACH DELETE s"
+        }
+
+        col_ex, col_load = st.columns([3.5, 1.2])
+        with col_ex:
+            selected_example = st.selectbox(
+                "Predefined Cypher Examples:",
+                options=list(cypher_examples.keys()),
+                index=0
+            )
+
+        with col_load:
+            st.write("")
+            st.write("")
+            if st.button("Load Query", use_container_width=True):
+                if cypher_examples[selected_example]:
+                    st.session_state["current_query_input"] = cypher_examples[selected_example]
+                    st.rerun()
+
+        query_input = st.text_area(
+            "Enter Cypher Statement:",
+            value=st.session_state.get("current_query_input", "MATCH (s:Student)-[:ENROLLED_IN]->(c:Course) RETURN s.name, c.name, s.gpa"),
+            height=100,
+            help="Type Cypher query. Examples: MATCH (n) RETURN n | CREATE (n:Student {name: 'Alice'})"
+        )
+        st.session_state["current_query_input"] = query_input
+
+        col_run, col_log_query = st.columns([1.5, 3.5])
+        with col_run:
+            run_clicked = st.button("Execute Cypher Query", type="primary", use_container_width=True)
+
+        if run_clicked:
+            res = engine.execute(query_input)
+            st.session_state["last_cypher_result"] = res
+            st.session_state["matched_node_ids"] = res["matched_node_ids"]
+            st.session_state["matched_rel_ids"] = res["matched_rel_ids"]
+
+            # Automatically log to trial book if requested
+            trial_record = {
+                "Trial #": len(st.session_state["trials"]) + 1,
+                "Operation": "Cypher Query",
+                "Query / Action": query_input[:65],
+                "Result": res["message"][:40],
+                "Status": "Success" if res["success"] else "Failed",
+                "Timestamp": datetime.now().strftime("%H:%M:%S")
+            }
+            st.session_state["trials"].append(trial_record)
+
+        # Render Query Execution Results
+        last_res = st.session_state.get("last_cypher_result")
+        if last_res:
+            st.divider()
+            if last_res["success"]:
+                st.success(f"**Query Succeeded** ({last_res['execution_time_ms']} ms): {last_res['message']}")
+                df = last_res["dataframe"]
+                if not df.empty:
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                else:
+                    st.caption("No tabular records returned by this statement.")
+            else:
+                st.error(f"**Query Failed** ({last_res['execution_time_ms']} ms): {last_res['message']}")
+                st.info("Tip: Ensure your labels, relationship types, and node variables are formatted correctly.")
+
+    # ----------------------------------------------------------------------------------
+    # TAB 2: VISUAL GRAPH BUILDER (UI CONTROLS)
+    # ----------------------------------------------------------------------------------
+    with tab_builder:
+        st.subheader("Visual Graph Builder")
+        st.caption("Construct and manipulate nodes, labels, relationships, and properties using intuitive graphical controls.")
+
+        sub_tab_node, sub_tab_rel, sub_tab_set, sub_tab_del = st.tabs([
+            "Add Node",
+            "Add Relationship",
+            "Update Property (SET)",
+            "Delete Entity"
+        ])
+
+        # SUB-TAB A: ADD NODE
+        with sub_tab_node:
+            col_lbl, col_id, col_name = st.columns(3)
+            with col_lbl:
+                node_label = st.selectbox("Entity Label (Type):", ["Student", "Course", "Faculty", "Department", "Project", "Custom..."])
+                if node_label == "Custom...":
+                    node_label = st.text_input("Custom Label Name:", value="Topic")
+            with col_id:
+                node_id_input = st.text_input("Node ID / Key:", value=f"node_{len(graph.nodes) + 1}", help="Unique identifier for the node")
+            with col_name:
+                node_name_input = st.text_input("Display Name:", value="New Entity")
+
+            col_p1, col_p2, col_p3 = st.columns(3)
+            with col_p1:
+                prop_key1 = st.text_input("Property 1 Key:", value="dept" if node_label in ["Student", "Faculty"] else "code")
+                prop_val1 = st.text_input("Property 1 Value:", value="CSE" if node_label in ["Student", "Faculty"] else "CS401")
+            with col_p2:
+                prop_key2 = st.text_input("Property 2 Key:", value="gpa" if node_label == "Student" else "credits")
+                prop_val2 = st.text_input("Property 2 Value:", value="3.75" if node_label == "Student" else "4")
+            with col_p3:
+                st.write("")
+                st.write("")
+                if st.button("Create Node", type="primary", use_container_width=True):
+                    try:
+                        props = {"name": node_name_input}
+                        if prop_key1 and prop_val1:
+                            # Auto-cast
+                            try:
+                                props[prop_key1] = float(prop_val1) if "." in prop_val1 else int(prop_val1)
+                            except ValueError:
+                                props[prop_key1] = prop_val1
+                        if prop_key2 and prop_val2:
+                            try:
+                                props[prop_key2] = float(prop_val2) if "." in prop_val2 else int(prop_val2)
+                            except ValueError:
+                                props[prop_key2] = prop_val2
+
+                        graph.add_node(node_id_input, [node_label], props)
+                        st.session_state["matched_node_ids"] = [node_id_input]
+
+                        # Log trial
+                        st.session_state["trials"].append({
+                            "Trial #": len(st.session_state["trials"]) + 1,
+                            "Operation": "CREATE Node",
+                            "Query / Action": f"CREATE (:{node_label} {{id: '{node_id_input}', name: '{node_name_input}'}})",
+                            "Result": f"Node '{node_id_input}' added",
+                            "Status": "Success",
+                            "Timestamp": datetime.now().strftime("%H:%M:%S")
+                        })
+                        st.toast(f"Node '{node_id_input}' created successfully!")
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"Error creating node: {str(ex)}")
+
+        # SUB-TAB B: ADD RELATIONSHIP
+        with sub_tab_rel:
+            node_options = [f"{nid} ({':'.join(n.labels)}: {n.display_name()})" for nid, n in graph.nodes.items()]
+            if len(node_options) < 2:
+                st.warning("Please create at least 2 nodes before creating a relationship.")
+            else:
+                col_src, col_rel, col_tgt = st.columns(3)
+                with col_src:
+                    src_choice = st.selectbox("Source Node (From):", options=node_options, index=0)
+                    src_id = src_choice.split(" ")[0]
+                with col_rel:
+                    rel_type = st.selectbox("Relationship Type:", ["ENROLLED_IN", "TEACHES", "PREREQUISITE_OF", "BELONGS_TO", "ADVISES", "OFFERED_BY", "Custom..."])
+                    if rel_type == "Custom...":
+                        rel_type = st.text_input("Custom Relationship Type:", value="CONNECTED_TO").upper()
+                with col_tgt:
+                    # Select target node
+                    tgt_choice = st.selectbox("Target Node (To):", options=node_options, index=min(1, len(node_options)-1))
+                    tgt_id = tgt_choice.split(" ")[0]
+
+                col_rp1, col_rp2, col_rp3 = st.columns(3)
+                with col_rp1:
+                    r_prop_k = st.text_input("Rel Property Key:", value="semester")
+                with col_rp2:
+                    r_prop_v = st.text_input("Rel Property Value:", value="Autumn 2024")
+                with col_rp3:
+                    st.write("")
+                    st.write("")
+                    if st.button("Create Relationship", type="primary", use_container_width=True):
+                        try:
+                            r_props = {}
+                            if r_prop_k and r_prop_v:
+                                r_props[r_prop_k] = r_prop_v
+                            r = graph.add_relationship(src_id, tgt_id, rel_type, r_props)
+                            st.session_state["matched_node_ids"] = [src_id, tgt_id]
+                            st.session_state["matched_rel_ids"] = [r.id]
+
+                            # Log trial
+                            st.session_state["trials"].append({
+                                "Trial #": len(st.session_state["trials"]) + 1,
+                                "Operation": "CREATE Rel",
+                                "Query / Action": f"CREATE ({src_id})-[:{rel_type}]->({tgt_id})",
+                                "Result": f"Rel '{r.id}' added",
+                                "Status": "Success",
+                                "Timestamp": datetime.now().strftime("%H:%M:%S")
+                            })
+                            st.toast(f"Relationship '{rel_type}' created!")
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Error creating relationship: {str(ex)}")
+
+        # SUB-TAB C: UPDATE PROPERTY (SET)
+        with sub_tab_set:
+            if not graph.nodes:
+                st.info("No nodes available to update.")
+            else:
+                col_u1, col_u2, col_u3, col_u4 = st.columns([2, 1.5, 1.5, 1.2])
+                with col_u1:
+                    u_node_choice = st.selectbox("Select Target Node:", options=node_options, key="update_node_sel")
+                    u_nid = u_node_choice.split(" ")[0]
+                with col_u2:
+                    set_k = st.text_input("Property Key to Update:", value="gpa")
+                with col_u3:
+                    set_v = st.text_input("New Property Value:", value="3.95")
+                with col_u4:
+                    st.write("")
+                    st.write("")
+                    if st.button("SET Property", type="primary", use_container_width=True):
+                        try:
+                            # Auto-cast
+                            try:
+                                v_parsed = float(set_v) if "." in set_v else int(set_v)
+                            except ValueError:
+                                v_parsed = set_v
+                            succ, msg = graph.update_node(u_nid, {set_k: v_parsed})
+                            st.session_state["matched_node_ids"] = [u_nid]
+                            st.session_state["trials"].append({
+                                "Trial #": len(st.session_state["trials"]) + 1,
+                                "Operation": "SET Property",
+                                "Query / Action": f"MATCH ({u_nid}) SET {set_k} = {set_v}",
+                                "Result": msg[:40],
+                                "Status": "Success" if succ else "Failed",
+                                "Timestamp": datetime.now().strftime("%H:%M:%S")
+                            })
+                            st.toast(msg)
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Error updating node: {str(ex)}")
+
+        # SUB-TAB D: DELETE ENTITY
+        with sub_tab_del:
+            col_dt, col_dt_pick, col_dt_btn = st.columns([1.5, 2.5, 1.5])
+            with col_dt:
+                del_mode = st.radio("Entity to Delete:", ["Node", "Relationship"])
+            with col_dt_pick:
+                if del_mode == "Node":
+                    del_node_choice = st.selectbox("Select Node:", options=node_options, key="del_n_choice")
+                    del_id = del_node_choice.split(" ")[0] if del_node_choice else ""
+                    detach_flag = st.checkbox("DETACH DELETE (Delete attached relationships)", value=True)
+                else:
+                    rel_options = [f"{rid} ({r.source} -[:{r.type}]-> {r.target})" for rid, r in graph.relationships.items()]
+                    if not rel_options:
+                        st.info("No relationships in graph.")
+                        del_id = ""
+                    else:
+                        del_rel_choice = st.selectbox("Select Relationship:", options=rel_options, key="del_r_choice")
+                        del_id = del_rel_choice.split(" ")[0]
+                    detach_flag = False
+
+            with col_dt_btn:
+                st.write("")
+                st.write("")
+                if st.button("Execute Delete", type="secondary", use_container_width=True):
+                    if del_mode == "Node":
+                        succ, msg = graph.delete_node(del_id, detach=detach_flag)
+                    else:
+                        succ, msg = graph.delete_relationship(del_id)
+
+                    st.session_state["trials"].append({
+                        "Trial #": len(st.session_state["trials"]) + 1,
+                        "Operation": "DELETE",
+                        "Query / Action": f"DETACH DELETE {del_id}" if detach_flag else f"DELETE {del_id}",
+                        "Result": msg[:40],
+                        "Status": "Success" if succ else "Failed",
+                        "Timestamp": datetime.now().strftime("%H:%M:%S")
+                    })
+                    if succ:
+                        st.session_state["matched_node_ids"] = []
+                        st.session_state["matched_rel_ids"] = []
+                        st.toast(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+    st.divider()
+
+    # ----------------------------------------------------------------------------------
+    # GRAPH VISUALIZATION & VIEW CONTROLS
+    # ----------------------------------------------------------------------------------
+    st.subheader("Real-Time Graph Visualization")
+
+    col_v1, col_v2, col_v3 = st.columns([2, 2, 2])
+    with col_v1:
+        layout_opt = st.selectbox(
+            "Graph Layout Algorithm:",
+            options=["Spring (Force-Directed)", "Circular", "Kamada-Kawai", "Shell"],
+            index=0
+        )
+    with col_v2:
+        label_opt = st.selectbox(
+            "Node Display Labels:",
+            options=["Name / Label", "Name Only", "Node ID", "Label Only"],
+            index=0
+        )
+    with col_v3:
+        st.write("")
+        st.write("")
+        if st.button("Clear Highlighting", use_container_width=True):
+            st.session_state["matched_node_ids"] = []
+            st.session_state["matched_rel_ids"] = []
+            st.rerun()
+
+    fig = render_graph_figure(
+        graph=graph,
+        matched_node_ids=st.session_state.get("matched_node_ids"),
+        matched_rel_ids=st.session_state.get("matched_rel_ids"),
+        layout_algorithm=layout_opt,
+        node_label_mode=label_opt
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ----------------------------------------------------------------------------------
+    # EXPERIMENTAL DATA LOGGER
+    # ----------------------------------------------------------------------------------
+    st.divider()
+    st.subheader("Experimental Data Log Book")
+    st.caption("Record parameters, queries, and graph behavior across trials for inclusion in your official lab report.")
+
+    col_log1, col_log2 = st.columns([1.8, 3.2])
+
+    with col_log1:
+        st.caption("Capture current graph metrics and last operation into your session log table:")
+        if st.button("Record Current State as Trial", type="primary", use_container_width=True):
+            trial_record = {
+                "Trial #": len(st.session_state["trials"]) + 1,
+                "Operation": "Graph Snapshot",
+                "Query / Action": f"Nodes: {metrics['num_nodes']}, Rels: {metrics['num_relationships']}",
+                "Result": f"Density: {metrics['density']}, AvgDeg: {metrics['avg_degree']}",
+                "Status": "Recorded",
+                "Timestamp": datetime.now().strftime("%H:%M:%S")
+            }
+            st.session_state["trials"].append(trial_record)
+            st.toast(f"Trial #{trial_record['Trial #']} successfully logged!")
+
+        if st.button("Clear Logged Trials", use_container_width=True):
+            st.session_state["trials"] = []
+            st.toast("Trial log cleared.")
+
+    with col_log2:
+        if st.session_state["trials"]:
+            df_trials = pd.DataFrame(st.session_state["trials"])
+            st.dataframe(df_trials, use_container_width=True, hide_index=True)
+            csv_data = df_trials.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "Download Trials as CSV",
+                data=csv_data,
+                file_name="graph_db_trials.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        else:
+            st.info("No trials recorded yet. Perform graph operations or click 'Record Current State as Trial' to begin.")
+
+
+def render_quiz_section():
+    """Renders Section 3: Assessment Quiz with Self-Grading and Feedback."""
+    st.header("Concept Assessment Quiz")
+    st.write("Evaluate your mastery of Graph Databases, the Property Graph Model, Cypher query syntax, and Neo4j architecture.")
+
+    with st.form("graph_lab_quiz_form"):
+        user_responses = {}
+        for q in QUIZ_QUESTIONS:
+            st.subheader(f"Question {q['id']}")
+            st.write(q["question"])
+            selected = st.radio(
+                label=f"Options for Question {q['id']}:",
+                options=q["options"],
+                index=st.session_state["quiz_answers"].get(q["id"], 0),
+                key=f"quiz_radio_{q['id']}",
+                label_visibility="collapsed"
+            )
+            user_responses[q["id"]] = q["options"].index(selected)
+            st.write("")
+
+        submitted = st.form_submit_button("Submit Quiz for Evaluation", type="primary")
+
+    if submitted:
+        score = 0
+        st.session_state["quiz_answers"] = user_responses
+        st.session_state["quiz_submitted"] = True
+
+        st.divider()
+        st.subheader("Evaluation Results and Feedback")
+        for q in QUIZ_QUESTIONS:
+            user_ans = user_responses.get(q["id"])
+            correct_ans = q["answer_index"]
+            if user_ans == correct_ans:
+                score += 1
+                st.success(f"**Question {q['id']}: Correct!**\n\n_{q['explanation']}_")
+            else:
+                st.error(
+                    f"**Question {q['id']}: Incorrect.** (Your answer: {q['options'][user_ans]})\n\n"
+                    f"**Correct Answer:** {q['options'][correct_ans]}\n\n"
+                    f"**Pedagogical Explanation:** _{q['explanation']}_"
+                )
+
+        st.session_state["quiz_score"] = score
+        perc = (score / len(QUIZ_QUESTIONS)) * 100
+        st.info(f"Final Score: **{score} / {len(QUIZ_QUESTIONS)}** ({perc:.0f}%)")
+
+    elif st.session_state.get("quiz_submitted", False):
+        st.success(f"Quiz already submitted. Current score: **{st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}**")
+
+
+def render_report_section():
+    """Renders Section 4: Dynamic Lab Report Generator with Guaranteed PDF Export."""
+    st.header("Report Generation")
+    st.write("Compile your student details, experimental graph benchmark trials, and quiz evaluation into an official PDF report.")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        student_name = st.text_input("Student Name", value=st.session_state["student_info"].get("name", "Student Name"))
+    with col2:
+        student_id = st.text_input("Student Roll / ID", value=st.session_state["student_info"].get("id", "21CS01"))
+    with col3:
+        lab_date = st.date_input("Experiment Date", value=datetime.now())
+
+    st.session_state["student_info"]["name"] = student_name
+    st.session_state["student_info"]["id"] = student_id
+    st.session_state["student_info"]["date"] = str(lab_date)
+
+    st.subheader("Discussion & Observations")
+    student_notes = st.text_area(
+        "Enter your interpretation of results, observations, and conclusions:",
+        value=st.session_state.get("student_notes", (
+            "During the experiment, we successfully created, queried, and managed an interconnected property graph. "
+            "Using Cypher pattern matching, relationships were traversed efficiently without relational multi-table joins. "
+            "Referential constraints were verified when attempting plain DELETE on connected nodes, demonstrating the necessity "
+            "of DETACH DELETE for safely removing graph entities."
+        )),
+        height=130
+    )
+    st.session_state["student_notes"] = student_notes
+
+    trials_df = pd.DataFrame(st.session_state["trials"]) if st.session_state["trials"] else pd.DataFrame()
+    graph_metrics = st.session_state["graph"].get_metrics()
+
+    st.divider()
+    st.subheader("Report Summary Preview")
+    st.write(f"**Experiment:** {EXPERIMENT_CONFIG['title']} ({EXPERIMENT_CONFIG['lab_code']})")
+    st.write(f"**Student:** {student_name} | **Roll No:** {student_id} | **Date:** {lab_date}")
+    st.write(f"**Current Graph:** {graph_metrics['num_nodes']} Nodes, {graph_metrics['num_relationships']} Relationships")
+    st.write(f"**Quiz Score:** {st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}")
+
+    if not trials_df.empty:
+        st.dataframe(trials_df, hide_index=True, use_container_width=True)
+    else:
+        st.info("Note: You have not recorded any trials in the Simulation tab yet. Your report will indicate 0 trials.")
+
+    # Generate PDF bytes and write file to disk
+    pdf_bytes = generate_pdf_report(
+        student_name=student_name,
+        student_id=student_id,
+        date_str=str(lab_date),
+        trials_df=trials_df,
+        quiz_score=st.session_state.get("quiz_score", 0),
+        quiz_total=len(QUIZ_QUESTIONS),
+        student_notes=student_notes,
+        graph_metrics=graph_metrics
+    )
+
+    # Save to local files for guaranteed download
+    os.makedirs("static", exist_ok=True)
+    with open("static/lab_report.pdf", "wb") as f:
+        f.write(pdf_bytes)
+    with open("lab_report.pdf", "wb") as f:
+        f.write(pdf_bytes)
+
+    st.divider()
+    st.subheader("Download Official Lab Report (.pdf)")
+
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        st.link_button(
+            "Open / Download PDF Document",
+            url="/app/static/lab_report.pdf",
+            type="primary",
+            use_container_width=True
+        )
+
+    with col_btn2:
+        st.download_button(
+            label="Download lab_report.pdf",
+            data=pdf_bytes,
+            file_name="neo4j_graph_lab_report.pdf",
+            mime="application/pdf",
+            key="stream_pdf_btn",
+            use_container_width=True
+        )
+
+
+# ======================================================================================
+# 6. MAIN ENTRYPOINT & NAVIGATION
+# ======================================================================================
+
+def init_session_state():
+    """Initializes Streamlit session state variables."""
+    if "graph" not in st.session_state:
+        g = PropertyGraph()
+        g.load_university_graph()
+        st.session_state["graph"] = g
+    if "cypher_engine" not in st.session_state:
+        st.session_state["cypher_engine"] = CypherEngine(st.session_state["graph"])
+    if "trials" not in st.session_state:
+        st.session_state["trials"] = []
+    if "matched_node_ids" not in st.session_state:
+        st.session_state["matched_node_ids"] = []
+    if "matched_rel_ids" not in st.session_state:
+        st.session_state["matched_rel_ids"] = []
+    if "last_cypher_result" not in st.session_state:
+        st.session_state["last_cypher_result"] = None
+    if "quiz_answers" not in st.session_state:
+        st.session_state["quiz_answers"] = {}
+    if "quiz_submitted" not in st.session_state:
+        st.session_state["quiz_submitted"] = False
+    if "quiz_score" not in st.session_state:
+        st.session_state["quiz_score"] = 0
+    if "student_info" not in st.session_state:
+        st.session_state["student_info"] = {
+            "name": "Student Name",
+            "id": "21CS01",
+            "date": str(datetime.now().date())
+        }
+    if "student_notes" not in st.session_state:
+        st.session_state["student_notes"] = ""
+    if "preset_index" not in st.session_state:
+        st.session_state["preset_index"] = 0
+
+
+def main():
+    st.set_page_config(
+        page_title="Create and Manage a Graph Database - Virtual Lab",
+        page_icon=None,
+        layout="wide"
+    )
+
+    init_session_state()
+
+    # Native Streamlit Title (No custom CSS)
+    st.title(EXPERIMENT_CONFIG["title"])
+    st.caption(f"**Virtual Laboratory Experiment** | {EXPERIMENT_CONFIG['course']} ({EXPERIMENT_CONFIG['lab_code']})")
+
+    # Navigation Sidebar
+    section = st.sidebar.radio(
+        "Lab Navigator",
+        options=["Theory", "Simulation", "Quiz", "Report Generation"]
+    )
+
+    st.sidebar.divider()
+    st.sidebar.subheader("Progress Tracker")
+    quiz_status = "Done" if st.session_state.get("quiz_submitted", False) else "Pending"
+    st.sidebar.write(f"- **Quiz Status:** {quiz_status}")
+    if st.session_state.get("quiz_submitted", False):
+        st.sidebar.write(f"- **Quiz Score:** `{st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}`")
+
+    st.sidebar.write(f"- **Recorded Trials:** `{len(st.session_state.get('trials', []))}`")
+    m = st.session_state["graph"].get_metrics()
+    st.sidebar.write(f"- **Graph Size:** `{m['num_nodes']} nodes, {m['num_relationships']} rels`")
+
+    # Section Dispatcher
+    if section == "Theory":
+        render_theory_section()
+    elif section == "Simulation":
+        render_simulation_section()
+    elif section == "Quiz":
+        render_quiz_section()
+    elif section == "Report Generation":
+        render_report_section()
+
+
+if __name__ == "__main__":
+    main()
