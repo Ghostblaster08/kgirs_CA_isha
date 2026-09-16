@@ -68,7 +68,7 @@ that experience exponential performance degradation ($O(N^k)$). Graph databases 
 the **Property Graph Model** combined with **Index-Free Adjacency (IFA)**, enabling constant-time traversal ($O(1)$) 
 per hop regardless of the total volume of data stored in the database.
     """,
-    "rdbms_vs_graph": """
+    "rdbms_vs_graph": r"""
 ### 2. Graph Database vs. Relational Database (RDBMS)
 
 | Feature / Dimension | Relational Database (RDBMS) | Graph Database (Neo4j / Property Graph) |
@@ -636,7 +636,9 @@ def render_graph_figure(graph: PropertyGraph,
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             height=500,
-            margin=dict(l=20, r=20, t=30, b=20)
+            margin=dict(l=20, r=20, t=30, b=20),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)"
         )
         return fig
 
@@ -684,33 +686,32 @@ def render_graph_figure(graph: PropertyGraph,
         edge_x.extend([x0, x1, None])
         edge_y.extend([y0, y1, None])
 
-        # Directional point (at 65% distance)
-        mx = x0 + 0.65 * (x1 - x0)
-        my = y0 + 0.65 * (y1 - y0)
+        # Directional point (at 60% distance for a slightly better look with large nodes)
+        mx = x0 + 0.60 * (x1 - x0)
+        my = y0 + 0.60 * (y1 - y0)
         mid_x.append(mx)
         mid_y.append(my)
 
         is_matched = rid in matched_rids_set
-        color = "#EAB308" if is_matched else "#64748B"
+        color = "#F59E0B" if is_matched else "#94A3B8"
         mid_color.append(color)
 
-        mid_text.append(f"{rel.type}")
+        mid_text.append(f"<b>{rel.type}</b>")
 
-        prop_str = "<br>".join([f"&nbsp;&nbsp;{k}: <b>{v}</b>" for k, v in rel.properties.items()])
+        prop_str = "".join([f"<tr><td><b>{k}</b>:</td><td>{v}</td></tr>" for k, v in rel.properties.items()])
         hover_info = (
-            f"<b>Relationship:</b> {rel.type}<br>"
-            f"<b>ID:</b> {rel.id}<br>"
-            f"<b>Source:</b> {rel.source} &rarr; <b>Target:</b> {rel.target}"
+            f"<b style='color:#334155; font-size:14px;'>Relationship: [{rel.type}]</b><br>"
+            f"<span style='color:#64748B;'>{rel.source} &rarr; {rel.target}</span><br>"
         )
         if prop_str:
-            hover_info += f"<br><b>Properties:</b><br>{prop_str}"
+            hover_info += f"<hr><table style='font-size:12px;'>{prop_str}</table>"
         mid_hover.append(hover_info)
 
     # Base Edge Lines
     fig.add_trace(go.Scatter(
         x=edge_x, y=edge_y,
         mode="lines",
-        line=dict(width=1.5, color="#94A3B8"),
+        line=dict(width=2, color="#CBD5E1"),
         hoverinfo="none",
         showlegend=False
     ))
@@ -720,10 +721,10 @@ def render_graph_figure(graph: PropertyGraph,
         fig.add_trace(go.Scatter(
             x=mid_x, y=mid_y,
             mode="text+markers",
-            marker=dict(size=8, symbol="triangle-up", color=mid_color),
+            marker=dict(size=10, symbol="triangle-up", color=mid_color, line=dict(width=1, color="white")),
             text=mid_text,
             textposition="top center",
-            textfont=dict(size=9, color="#475569", family="sans-serif"),
+            textfont=dict(size=10, color="#475569", family="Arial, sans-serif"),
             hoverinfo="text",
             hovertext=mid_hover,
             showlegend=False
@@ -756,37 +757,39 @@ def render_graph_figure(graph: PropertyGraph,
             node = graph.nodes[nid]
             is_matched = nid in matched_nids_set
 
-            # Sizing & Highlights
+            # Sizing & Highlights for premium feel
             if is_matched:
-                sizes.append(30)
-                line_widths.append(3.5)
-                line_colors.append("#EAB308")  # Gold Highlight
+                sizes.append(45)
+                line_widths.append(4)
+                line_colors.append("#FDE047")  # Bright Yellow Highlight
             else:
-                sizes.append(22)
-                line_widths.append(1.5)
+                sizes.append(36)
+                line_widths.append(2.5)
                 line_colors.append("#FFFFFF")
 
             # Display text
             if node_label_mode == "Name / Label":
-                display_texts.append(f"{node.display_name()}\n(:{label_name})")
+                display_texts.append(f"<b>{node.display_name()}</b><br><i>:{label_name}</i>")
             elif node_label_mode == "Name Only":
-                display_texts.append(node.display_name())
+                display_texts.append(f"<b>{node.display_name()}</b>")
             elif node_label_mode == "Node ID":
-                display_texts.append(nid)
+                display_texts.append(f"<b>{nid}</b>")
             elif node_label_mode == "Label Only":
-                display_texts.append(f":{label_name}")
+                display_texts.append(f"<b>:{label_name}</b>")
             else:
                 display_texts.append("")
 
-            # Hover information
+            # Premium HTML Hover information
             labels_str = ":" + ":".join(sorted(node.labels))
-            prop_lines = "<br>".join([f"&nbsp;&nbsp;{k}: <b>{v}</b>" for k, v in node.properties.items()])
+            prop_lines = "".join([f"<tr><td style='padding-right:10px;'><b>{k}</b>:</td><td>{v}</td></tr>" for k, v in node.properties.items()])
+            
             hover = (
-                f"<b>Node:</b> {nid}<br>"
-                f"<b>Labels:</b> <code>{labels_str}</code>"
+                f"<b style='color:#1E293B; font-size:15px;'>{node.display_name()}</b><br>"
+                f"<span style='color:#6366F1;'>{labels_str}</span><br>"
+                f"<span style='color:#94A3B8; font-size:11px;'>ID: {nid}</span>"
             )
             if prop_lines:
-                hover += f"<br><b>Properties:</b><br>{prop_lines}"
+                hover += f"<hr><table style='font-size:12px; color:#334155;'>{prop_lines}</table>"
             hover_texts.append(hover)
 
         fig.add_trace(go.Scatter(
@@ -796,11 +799,12 @@ def render_graph_figure(graph: PropertyGraph,
             marker=dict(
                 size=sizes,
                 color=base_color,
-                line=dict(width=line_widths, color=line_colors)
+                line=dict(width=line_widths, color=line_colors),
+                opacity=0.95
             ),
             text=display_texts,
             textposition="bottom center",
-            textfont=dict(size=10, color="#1E293B"),
+            textfont=dict(size=12, color="#0F172A", family="Arial, sans-serif"),
             hoverinfo="text",
             hovertext=hover_texts
         ))
@@ -808,33 +812,46 @@ def render_graph_figure(graph: PropertyGraph,
     # Matched highlight legend indicator if any
     if matched_node_ids:
         fig.add_annotation(
-            text=f"Matched Subgraph: {len(matched_node_ids)} Node(s) highlighted in Gold",
+            text=f"✨ Matched Subgraph: {len(matched_node_ids)} Node(s) highlighted",
             xref="paper", yref="paper",
-            x=0.02, y=0.98, showarrow=False,
+            x=0.01, y=0.99, showarrow=False,
             bgcolor="#FEF08A",
-            font=dict(size=11, color="#854D0E"),
+            font=dict(size=12, color="#854D0E", family="Arial, sans-serif"),
             bordercolor="#FACC15",
-            borderwidth=1,
-            borderpad=4
+            borderwidth=2,
+            borderpad=6,
+            opacity=0.9
         )
 
     fig.update_layout(
-        title=dict(text="Interactive Labeled Property Graph View", font=dict(size=14)),
+        title=dict(text="<b>Interactive Graph Topology</b>", font=dict(size=18, family="Arial, sans-serif", color="#1E293B")),
         hovermode="closest",
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        height=540,
-        margin=dict(l=15, r=15, t=40, b=20),
+        height=600,
+        margin=dict(l=15, r=15, t=50, b=20),
+        plot_bgcolor="rgba(248,250,252,0.6)", # subtle slate-50 background
+        paper_bgcolor="rgba(0,0,0,0)",
         legend=dict(
             orientation="h",
             yanchor="bottom",
             y=1.02,
             xanchor="right",
-            x=1
+            x=1,
+            font=dict(size=11),
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="#E2E8F0",
+            borderwidth=1
+        ),
+        hoverlabel=dict(
+            bgcolor="white",
+            font_size=13,
+            font_family="Arial, sans-serif"
         )
     )
 
     return fig
+
 
 
 # ======================================================================================
@@ -845,35 +862,54 @@ def render_theory_section():
     """Renders Section 1: Theory, Background, Architecture, Cypher, and Procedure."""
     st.header("Theoretical Framework: Graph Databases & Neo4j")
 
-    st.subheader("Aim & Objective")
-    st.markdown(f"> **Aim:** {THEORY_CONTENT['aim']}")
+    st.info(f"**Aim:** {THEORY_CONTENT['aim']}", icon="🎯")
 
     st.subheader("Learning Objectives")
     for i, obj in enumerate(THEORY_CONTENT["learning_objectives"]):
-        st.write(f"- **Objective {i+1}**: {obj}")
+        st.write(f"- ✅ {obj}")
 
     st.divider()
-    st.markdown(THEORY_CONTENT["introduction"])
-    st.markdown(THEORY_CONTENT["rdbms_vs_graph"])
-    st.markdown(THEORY_CONTENT["neo4j_architecture"])
-    st.markdown(THEORY_CONTENT["cypher_crud"])
-    st.markdown(THEORY_CONTENT["setup_procedure"])
 
-    st.divider()
-    st.subheader("Step-by-Step Experimental Procedure")
-    for step in THEORY_CONTENT["procedure"]:
-        st.write(f"- {step}")
+    # Create tabs for better organization
+    tabs = st.tabs([
+        "Introduction", 
+        "RDBMS vs Graph", 
+        "Neo4j Architecture", 
+        "Cypher & CRUD", 
+        "Procedure", 
+        "Glossary"
+    ])
 
-    st.divider()
-    st.markdown(THEORY_CONTENT["precautions"])
+    with tabs[0]:
+        st.markdown(THEORY_CONTENT["introduction"])
+    
+    with tabs[1]:
+        st.markdown(THEORY_CONTENT["rdbms_vs_graph"])
+        st.success("**Key Takeaway**: Index-Free Adjacency (IFA) ensures that graph traversal performance remains constant regardless of the total database size.", icon="💡")
 
-    st.divider()
-    with st.expander("Comprehensive Key Terminology Reference (Glossary)"):
+    with tabs[2]:
+        st.markdown(THEORY_CONTENT["neo4j_architecture"])
+
+    with tabs[3]:
+        st.markdown(THEORY_CONTENT["cypher_crud"])
+
+    with tabs[4]:
+        st.markdown(THEORY_CONTENT["setup_procedure"])
+        st.divider()
+        st.subheader("Step-by-Step Experimental Procedure")
+        for step in THEORY_CONTENT["procedure"]:
+            st.write(f"- {step}")
+        st.divider()
+        st.warning("**Precautions:**", icon="⚠️")
+        st.markdown(THEORY_CONTENT["precautions"])
+
+    with tabs[5]:
+        st.markdown("### Comprehensive Key Terminology Reference")
         glossary_df = pd.DataFrame(
             list(THEORY_CONTENT["key_terms"].items()),
             columns=["Term", "Formal Definition & Operational Role"]
         )
-        st.table(glossary_df)
+        st.dataframe(glossary_df, use_container_width=True, hide_index=True)
 
 
 def render_simulation_section():
@@ -887,68 +923,73 @@ def render_simulation_section():
     graph: PropertyGraph = st.session_state["graph"]
     engine: CypherEngine = st.session_state["cypher_engine"]
 
-    # Top Control Bar: Presets and Reset
-    col_preset1, col_preset2, col_reset = st.columns([2.5, 1.5, 1.2])
-
-    with col_preset1:
-        preset_choice = st.selectbox(
-            "Load Domain Graph Preset:",
-            options=[
-                "University Academic Knowledge Graph (Default)",
-                "Social Network & Friendships",
-                "Financial Fraud Detection Ring",
-                "Blank / Empty Graph"
-            ],
-            index=st.session_state.get("preset_index", 0)
-        )
-
-    with col_preset2:
-        st.write("")
-        st.write("")
-        if st.button("Load Selected Preset", use_container_width=True):
-            if preset_choice.startswith("University"):
-                graph.load_university_graph()
-                st.session_state["preset_index"] = 0
-            elif preset_choice.startswith("Social"):
-                graph.load_social_graph()
-                st.session_state["preset_index"] = 1
-            elif preset_choice.startswith("Financial"):
-                graph.load_fraud_graph()
-                st.session_state["preset_index"] = 2
-            else:
-                graph.clear()
-                st.session_state["preset_index"] = 3
-
-            st.session_state["matched_node_ids"] = []
-            st.session_state["matched_rel_ids"] = []
-            st.session_state["last_cypher_result"] = None
-            st.toast(f"Loaded '{preset_choice}' successfully!")
-            st.rerun()
-
-    with col_reset:
-        st.write("")
-        st.write("")
-        if st.button("Reset Graph", type="secondary", use_container_width=True):
-            graph.clear()
-            st.session_state["matched_node_ids"] = []
-            st.session_state["matched_rel_ids"] = []
-            st.session_state["last_cypher_result"] = None
-            st.toast("Graph has been cleared to empty state.")
-            st.rerun()
-
-    # Graph Metrics Row
+    # Graph Metrics Row (moved up for prominence)
     metrics = graph.get_metrics()
-    m1, m2, m3, m4, m5 = st.columns(5)
-    with m1:
-        st.metric("Total Nodes", f"{metrics['num_nodes']}")
-    with m2:
-        st.metric("Relationships", f"{metrics['num_relationships']}")
-    with m3:
-        st.metric("Distinct Labels", f"{metrics['num_labels']}")
-    with m4:
-        st.metric("Rel Types", f"{metrics['num_rel_types']}")
-    with m5:
-        st.metric("Graph Density", f"{metrics['density']}")
+    with st.container(border=True):
+        m1, m2, m3, m4, m5 = st.columns(5)
+        with m1:
+            st.metric("Total Nodes", f"{metrics['num_nodes']}")
+        with m2:
+            st.metric("Relationships", f"{metrics['num_relationships']}")
+        with m3:
+            st.metric("Distinct Labels", f"{metrics['num_labels']}")
+        with m4:
+            st.metric("Rel Types", f"{metrics['num_rel_types']}")
+        with m5:
+            st.metric("Graph Density", f"{metrics['density']}")
+
+    st.write("")
+    
+    # Top Control Bar: Presets and Reset
+    with st.container(border=True):
+        st.subheader("Graph Control Panel")
+        col_preset1, col_preset2, col_reset = st.columns([2.5, 1.5, 1.2])
+
+        with col_preset1:
+            preset_choice = st.selectbox(
+                "Load Domain Graph Preset:",
+                options=[
+                    "University Academic Knowledge Graph (Default)",
+                    "Social Network & Friendships",
+                    "Financial Fraud Detection Ring",
+                    "Blank / Empty Graph"
+                ],
+                index=st.session_state.get("preset_index", 0)
+            )
+
+        with col_preset2:
+            st.write("")
+            st.write("")
+            if st.button("Load Selected Preset", use_container_width=True):
+                if preset_choice.startswith("University"):
+                    graph.load_university_graph()
+                    st.session_state["preset_index"] = 0
+                elif preset_choice.startswith("Social"):
+                    graph.load_social_graph()
+                    st.session_state["preset_index"] = 1
+                elif preset_choice.startswith("Financial"):
+                    graph.load_fraud_graph()
+                    st.session_state["preset_index"] = 2
+                else:
+                    graph.clear()
+                    st.session_state["preset_index"] = 3
+
+                st.session_state["matched_node_ids"] = []
+                st.session_state["matched_rel_ids"] = []
+                st.session_state["last_cypher_result"] = None
+                st.toast(f"Loaded '{preset_choice}' successfully!")
+                st.rerun()
+
+        with col_reset:
+            st.write("")
+            st.write("")
+            if st.button("Reset Graph", type="secondary", use_container_width=True):
+                graph.clear()
+                st.session_state["matched_node_ids"] = []
+                st.session_state["matched_rel_ids"] = []
+                st.session_state["last_cypher_result"] = None
+                st.toast("Graph has been cleared to empty state.")
+                st.rerun()
 
     st.divider()
 
@@ -962,8 +1003,9 @@ def render_simulation_section():
     # TAB 1: CYPHER QUERY CONSOLE
     # ----------------------------------------------------------------------------------
     with tab_cypher:
-        st.subheader("Cypher Query Execution Console")
-        st.caption("Execute declarative Cypher queries against the in-memory graph. Supported: MATCH, CREATE, SET, DELETE, DETACH DELETE, WHERE, aggregations.")
+        with st.container(border=True):
+            st.subheader("Cypher Query Execution Console")
+            st.caption("Execute declarative Cypher queries against the in-memory graph. Supported: MATCH, CREATE, SET, DELETE, DETACH DELETE, WHERE, aggregations.")
 
         cypher_examples = {
             "-- Select an Educational Cypher Example --": "",
@@ -1328,18 +1370,18 @@ def render_quiz_section():
     with st.form("graph_lab_quiz_form"):
         user_responses = {}
         for q in QUIZ_QUESTIONS:
-            st.subheader(f"Question {q['id']}")
-            st.write(q["question"])
-            selected = st.radio(
-                label=f"Options for Question {q['id']}:",
-                options=q["options"],
-                index=st.session_state["quiz_answers"].get(q["id"], 0),
-                key=f"quiz_radio_{q['id']}",
-                label_visibility="collapsed"
-            )
-            user_responses[q["id"]] = q["options"].index(selected)
-            st.write("")
-
+            with st.container(border=True):
+                st.markdown(f"**Question {q['id']}:** {q['question']}")
+                selected = st.radio(
+                    label=f"Options for Question {q['id']}:",
+                    options=q["options"],
+                    index=st.session_state["quiz_answers"].get(q["id"], 0),
+                    key=f"quiz_radio_{q['id']}",
+                    label_visibility="collapsed"
+                )
+                user_responses[q["id"]] = q["options"].index(selected)
+        
+        st.write("")
         submitted = st.form_submit_button("Submit Quiz for Evaluation", type="primary")
 
     if submitted:
@@ -1352,22 +1394,30 @@ def render_quiz_section():
         for q in QUIZ_QUESTIONS:
             user_ans = user_responses.get(q["id"])
             correct_ans = q["answer_index"]
-            if user_ans == correct_ans:
-                score += 1
-                st.success(f"**Question {q['id']}: Correct!**\n\n_{q['explanation']}_")
-            else:
-                st.error(
-                    f"**Question {q['id']}: Incorrect.** (Your answer: {q['options'][user_ans]})\n\n"
-                    f"**Correct Answer:** {q['options'][correct_ans]}\n\n"
-                    f"**Pedagogical Explanation:** _{q['explanation']}_"
-                )
+            with st.container(border=True):
+                if user_ans == correct_ans:
+                    score += 1
+                    st.success(f"**Question {q['id']}: Correct!**", icon="✅")
+                    st.caption(f"_{q['explanation']}_")
+                else:
+                    st.error(f"**Question {q['id']}: Incorrect.**", icon="❌")
+                    st.write(f"Your answer: `{q['options'][user_ans]}`")
+                    st.write(f"**Correct Answer:** `{q['options'][correct_ans]}`")
+                    st.caption(f"**Explanation:** _{q['explanation']}_")
 
         st.session_state["quiz_score"] = score
         perc = (score / len(QUIZ_QUESTIONS)) * 100
-        st.info(f"Final Score: **{score} / {len(QUIZ_QUESTIONS)}** ({perc:.0f}%)")
+        
+        if perc == 100:
+            st.balloons()
+            st.success(f"🎉 **Perfect Score!** You got {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%)", icon="🏆")
+        elif perc >= 70:
+            st.info(f"**Great Job!** Final Score: {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%)", icon="👍")
+        else:
+            st.warning(f"**Keep Trying!** Final Score: {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%)", icon="📚")
 
     elif st.session_state.get("quiz_submitted", False):
-        st.success(f"Quiz already submitted. Current score: **{st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}**")
+        st.success(f"Quiz already submitted. Current score: **{st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}**", icon="✅")
 
 
 def render_report_section():
@@ -1375,45 +1425,53 @@ def render_report_section():
     st.header("Report Generation")
     st.write("Compile your student details, experimental graph benchmark trials, and quiz evaluation into an official PDF report.")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        student_name = st.text_input("Student Name", value=st.session_state["student_info"].get("name", "Student Name"))
-    with col2:
-        student_id = st.text_input("Student Roll / ID", value=st.session_state["student_info"].get("id", "21CS01"))
-    with col3:
-        lab_date = st.date_input("Experiment Date", value=datetime.now())
+    with st.container(border=True):
+        st.subheader("Student Details")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            student_name = st.text_input("Student Name", value=st.session_state["student_info"].get("name", "Student Name"))
+        with col2:
+            student_id = st.text_input("Student Roll / ID", value=st.session_state["student_info"].get("id", "21CS01"))
+        with col3:
+            lab_date = st.date_input("Experiment Date", value=datetime.now())
 
     st.session_state["student_info"]["name"] = student_name
     st.session_state["student_info"]["id"] = student_id
     st.session_state["student_info"]["date"] = str(lab_date)
 
-    st.subheader("Discussion & Observations")
-    student_notes = st.text_area(
-        "Enter your interpretation of results, observations, and conclusions:",
-        value=st.session_state.get("student_notes", (
-            "During the experiment, we successfully created, queried, and managed an interconnected property graph. "
-            "Using Cypher pattern matching, relationships were traversed efficiently without relational multi-table joins. "
-            "Referential constraints were verified when attempting plain DELETE on connected nodes, demonstrating the necessity "
-            "of DETACH DELETE for safely removing graph entities."
-        )),
-        height=130
-    )
-    st.session_state["student_notes"] = student_notes
+    with st.container(border=True):
+        st.subheader("Discussion & Observations")
+        student_notes = st.text_area(
+            "Enter your interpretation of results, observations, and conclusions:",
+            value=st.session_state.get("student_notes", (
+                "During the experiment, we successfully created, queried, and managed an interconnected property graph. "
+                "Using Cypher pattern matching, relationships were traversed efficiently without relational multi-table joins. "
+                "Referential constraints were verified when attempting plain DELETE on connected nodes, demonstrating the necessity "
+                "of DETACH DELETE for safely removing graph entities."
+            )),
+            height=130
+        )
+        st.session_state["student_notes"] = student_notes
 
     trials_df = pd.DataFrame(st.session_state["trials"]) if st.session_state["trials"] else pd.DataFrame()
     graph_metrics = st.session_state["graph"].get_metrics()
 
     st.divider()
-    st.subheader("Report Summary Preview")
-    st.write(f"**Experiment:** {EXPERIMENT_CONFIG['title']} ({EXPERIMENT_CONFIG['lab_code']})")
-    st.write(f"**Student:** {student_name} | **Roll No:** {student_id} | **Date:** {lab_date}")
-    st.write(f"**Current Graph:** {graph_metrics['num_nodes']} Nodes, {graph_metrics['num_relationships']} Relationships")
-    st.write(f"**Quiz Score:** {st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}")
+    
+    with st.container(border=True):
+        st.subheader("Report Summary Preview")
+        st.markdown(f"**Experiment:** {EXPERIMENT_CONFIG['title']} ({EXPERIMENT_CONFIG['lab_code']})")
+        
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Student", student_name)
+        c2.metric("Roll No", student_id)
+        c3.metric("Graph Nodes", graph_metrics['num_nodes'])
+        c4.metric("Quiz Score", f"{st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}")
 
-    if not trials_df.empty:
-        st.dataframe(trials_df, hide_index=True, use_container_width=True)
-    else:
-        st.info("Note: You have not recorded any trials in the Simulation tab yet. Your report will indicate 0 trials.")
+        if not trials_df.empty:
+            st.dataframe(trials_df, hide_index=True, use_container_width=True)
+        else:
+            st.info("Note: You have not recorded any trials in the Simulation tab yet. Your report will indicate 0 trials.")
 
     # Generate PDF bytes and write file to disk
     pdf_bytes = generate_pdf_report(
@@ -1434,10 +1492,10 @@ def render_report_section():
     with open("lab_report.pdf", "wb") as f:
         f.write(pdf_bytes)
 
-    st.divider()
-    st.subheader("Download Official Lab Report (.pdf)")
-
-    col_btn1, col_btn2 = st.columns(2)
+    with st.container(border=True):
+        st.subheader("Download Official Lab Report (.pdf)")
+        st.caption("Your personalized PDF report is ready to be downloaded and submitted.")
+        col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         st.link_button(
             "Open / Download PDF Document",
