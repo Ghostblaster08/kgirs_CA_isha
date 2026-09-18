@@ -22,6 +22,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import networkx as nx
 import streamlit as st
+import streamlit.components.v1 as components
+import json
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
@@ -854,19 +856,306 @@ def render_graph_figure(graph: PropertyGraph,
 
 
 
+
+def render_interactive_graph_canvas(graph: PropertyGraph, 
+                                    matched_node_ids: Optional[List[str]] = None,
+                                    matched_rel_ids: Optional[List[str]] = None) -> None:
+    """Renders a Neo4j Bloom style interactive graph using vis-network."""
+    
+    nodes_data = []
+    edges_data = []
+    
+    matched_nids = set(matched_node_ids) if matched_node_ids else set()
+    matched_rids = set(matched_rel_ids) if matched_rel_ids else set()
+    
+    for nid, node in graph.nodes.items():
+        primary_label = sorted(list(node.labels))[0] if node.labels else "Entity"
+        base_color = LABEL_COLORS.get(primary_label, DEFAULT_NODE_COLOR)
+        
+        is_matched = nid in matched_nids
+        border_width = 4 if is_matched else 2
+        border_color = "#FACC15" if is_matched else "#FFFFFF"
+        
+        # Build hover title (HTML)
+        labels_str = ":" + ":".join(sorted(node.labels))
+        prop_lines = "".join([f"<tr><td style='padding-right:8px;'><b>{k}</b></td><td>{v}</td></tr>" for k,v in node.properties.items()])
+        title_html = f"<div style='font-family: Arial, sans-serif; padding:5px;'><b style='color:#1E293B; font-size:14px;'>{node.display_name()}</b><br><span style='color:#6366F1; font-size:12px;'>{labels_str}</span><br><span style='color:#94A3B8; font-size:10px;'>ID: {nid}</span>"
+        if prop_lines:
+            title_html += f"<hr style='margin:4px 0;'><table style='font-size:11px; color:#334155;'>{prop_lines}</table>"
+        title_html += "</div>"
+        
+        nodes_data.append({
+            "id": nid,
+            "label": f"<b>{node.display_name()}</b>\n<i>:{primary_label}</i>",
+            "title": title_html,
+            "color": {
+                "background": base_color,
+                "border": border_color,
+                "highlight": {"background": base_color, "border": "#F59E0B"},
+                "hover": {"background": base_color, "border": "#94A3B8"}
+            },
+            "borderWidth": border_width,
+            "borderWidthSelected": 4,
+            "shape": "dot",
+            "size": 32,
+            "font": {"size": 12, "color": "#0F172A", "face": "Arial, sans-serif", "multi": "html", "align": "center"}
+        })
+        
+    for rid, rel in graph.relationships.items():
+        is_matched = rid in matched_rids
+        edge_color = "#F59E0B" if is_matched else "#94A3B8"
+        
+        prop_lines = "".join([f"<tr><td style='padding-right:8px;'><b>{k}</b></td><td>{v}</td></tr>" for k,v in rel.properties.items()])
+        title_html = f"<div style='font-family: Arial, sans-serif; padding:5px;'><b style='color:#334155; font-size:13px;'>[{rel.type}]</b><br><span style='color:#64748B; font-size:11px;'>{rel.source} &rarr; {rel.target}</span>"
+        if prop_lines:
+            title_html += f"<hr style='margin:4px 0;'><table style='font-size:11px;'>{prop_lines}</table>"
+        title_html += "</div>"
+        
+        edges_data.append({
+            "id": rid,
+            "from": rel.source,
+            "to": rel.target,
+            "label": f"  {rel.type}  ",
+            "title": title_html,
+            "color": {"color": edge_color, "highlight": "#F59E0B", "hover": "#64748B"},
+            "width": 2 if not is_matched else 3,
+            "arrows": {"to": {"enabled": True, "scaleFactor": 0.8}},
+            "font": {"size": 10, "color": "#475569", "face": "Arial, sans-serif", "background": "rgba(255,255,255,0.9)", "strokeWidth": 0, "align": "middle"},
+            "smooth": {"type": "continuous", "roundness": 0.15}
+        })
+
+    nodes_json = json.dumps(nodes_data)
+    edges_json = json.dumps(edges_data)
+    
+    html_code = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+        <style type="text/css">
+            body {{ margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }}
+            #mynetwork {{
+                width: 100%;
+                height: 680px;
+                border: 1px solid #cfd8d5;
+                background-color: #fbfaf6;
+                border-radius: 2px;
+            }}
+            .vis-tooltip {{
+                background-color: white !important;
+                border: 1px solid #CBD5E1 !important;
+                border-radius: 2px !important;
+                box-shadow: 0 4px 12px rgba(32, 37, 43, 0.12) !important;
+                color: #334155 !important;
+                padding: 0 !important;
+                pointer-events: none;
+            }}
+            #controls {{
+                position: absolute;
+                bottom: 20px;
+                right: 20px;
+                z-index: 100;
+                display: flex;
+                gap: 8px;
+                background: rgba(255,255,255,0.9);
+                padding: 6px;
+                border-radius: 2px;
+                box-shadow: 0 2px 8px rgba(32,37,43,0.1);
+                border: 1px solid #cfd8d5;
+            }}
+            .ctrl-btn {{
+                background: white; border: 1px solid #CBD5E1; border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 14px; color: #475569; font-weight: 500;
+                transition: all 0.2s;
+            }}
+            .ctrl-btn:hover {{ background: #F1F5F9; border-color: #94A3B8; color: #0F172A; }}
+            
+            #legend {{
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                z-index: 100;
+                background: rgba(255,255,255,0.95);
+                padding: 12px;
+                border-radius: 2px;
+                box-shadow: 0 2px 8px rgba(32,37,43,0.1);
+                border: 1px solid #cfd8d5;
+                max-width: 180px;
+                font-size: 12px;
+                max-height: 560px;
+                overflow-y: auto;
+            }}
+            .legend-title {{ font-weight: 600; margin-bottom: 8px; color: #1E293B; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px; }}
+            .legend-item {{ display: flex; align-items: center; margin-bottom: 6px; justify-content: space-between; }}
+            .legend-label-group {{ display: flex; align-items: center; gap: 6px; }}
+            .dot {{ width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.1); }}
+            .badge {{ background: #e7efed; color: #1e5b61; padding: 2px 6px; border-radius: 2px; font-size: 10px; font-weight: 600; }}
+            .rel-badge {{ background: #fbfaf6; border: 1px solid #cfd8d5; color: #47545a; padding: 2px 6px; border-radius: 2px; font-size: 10px; font-weight: 600; }}
+        </style>
+    </head>
+    <body>
+        <div style="position: relative; width: 100%;">
+            <div id="mynetwork"></div>
+            
+            <div id="legend">
+                <div class="legend-title">Node Labels</div>
+                <div id="node-legend-container"></div>
+                <div class="legend-title" style="margin-top: 12px;">Relationship Types</div>
+                <div id="rel-legend-container"></div>
+            </div>
+            
+            <div id="controls">
+                <button class="ctrl-btn" onclick="network.fit({{animation: true}})" title="Fit to View">Fit view</button>
+                <button class="ctrl-btn" onclick="zoom(0.2)" title="Zoom In">Zoom in</button>
+                <button class="ctrl-btn" onclick="zoom(-0.2)" title="Zoom Out">Zoom out</button>
+                <button class="ctrl-btn" id="physics-btn" onclick="togglePhysics()" title="Toggle Physics">Freeze layout</button>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var nodes = new vis.DataSet({nodes_json});
+            var edges = new vis.DataSet({edges_json});
+
+            var container = document.getElementById('mynetwork');
+            var data = {{ nodes: nodes, edges: edges }};
+            var options = {{
+                physics: {{
+                    enabled: true,
+                    solver: 'forceAtlas2Based',
+                    forceAtlas2Based: {{
+                        gravitationalConstant: -60,
+                        centralGravity: 0.015,
+                        springLength: 120,
+                        springConstant: 0.08,
+                        damping: 0.4,
+                        avoidOverlap: 0.5
+                    }},
+                    stabilization: {{ iterations: 150 }}
+                }},
+                interaction: {{
+                    hover: true,
+                    tooltipDelay: 100,
+                    zoomView: true,
+                    dragView: true,
+                    dragNodes: true
+                }},
+                layout: {{
+                    improvedLayout: true
+                }}
+            }};
+            var network = new vis.Network(container, data, options);
+            
+            // Build Legend dynamically
+            const nodeLegendContainer = document.getElementById('node-legend-container');
+            const relLegendContainer = document.getElementById('rel-legend-container');
+            
+            // Aggregate labels
+            const labelCounts = {{}};
+            const labelColors = {{}};
+            nodes.forEach(n => {{
+                let lbl = n.label.split("<i>:")[1]?.split("</i>")[0] || "Entity";
+                labelCounts[lbl] = (labelCounts[lbl] || 0) + 1;
+                labelColors[lbl] = n.color.background;
+            }});
+            
+            const relCounts = {{}};
+            edges.forEach(e => {{
+                let type = e.label.trim();
+                relCounts[type] = (relCounts[type] || 0) + 1;
+            }});
+            
+            Object.keys(labelCounts).sort().forEach(lbl => {{
+                let div = document.createElement('div');
+                div.className = 'legend-item';
+                div.innerHTML = `<div class="legend-label-group"><span class="dot" style="background-color: ${{labelColors[lbl]}};"></span> <span style="color:#334155;">${{lbl}}</span></div> <span class="badge">${{labelCounts[lbl]}}</span>`;
+                nodeLegendContainer.appendChild(div);
+            }});
+            
+            Object.keys(relCounts).sort().forEach(type => {{
+                let div = document.createElement('div');
+                div.className = 'legend-item';
+                div.innerHTML = `<span class="rel-badge">${{type}}</span> <span class="badge">${{relCounts[type]}}</span>`;
+                relLegendContainer.appendChild(div);
+            }});
+            
+            function zoom(scale) {{
+                var newScale = network.getScale() * (1 + scale);
+                network.moveTo({{ scale: newScale, animation: {{ duration: 300 }} }});
+            }}
+            
+            var physicsEnabled = true;
+            function togglePhysics() {{
+                physicsEnabled = !physicsEnabled;
+                network.setOptions({{ physics: {{ enabled: physicsEnabled }} }});
+                document.getElementById('physics-btn').innerHTML = physicsEnabled ? '⚡ Freeze' : '▶️ Unfreeze';
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    
+    components.html(html_code, height=700)
+
 # ======================================================================================
 # 5. SECTION RENDERERS
+
 # ======================================================================================
+
+def go_to_simulation():
+    """Route the cover action through the existing sidebar navigation state."""
+    st.session_state["requested_section"] = "02  Simulation"
+
+
+def render_experiment_cover():
+    """Renders the opening spread of the digital practical manual."""
+    st.markdown(f"""
+        <section class="experiment-cover">
+            <div class="cover-copy">
+                <div class="hero-eyebrow"><span class="hero-dot"></span>VIRTUAL LABORATORY / DATABASE MANAGEMENT SYSTEMS <span class="hero-badge">{EXPERIMENT_CONFIG['lab_code']}</span></div>
+                <div class="manual-kicker">Experiment 08 / Database Management Systems</div>
+                <h2>Create and Manage<br>a Graph Database</h2>
+                <p>Explore how connected data is represented, queried, and visualized through the labeled property graph model.</p>
+                <div class="cover-meta"><span>Interactive simulation</span><span>Cypher engine</span><span>Practical record</span></div>
+            </div>
+            <div class="cover-visual" aria-label="Abstract graph showing connected nodes">
+                <svg viewBox="0 0 430 270" role="img" aria-hidden="true">
+                    <path class="graph-line" d="M72 150 L165 72 L286 104 L360 194 L215 222 L72 150 M165 72 L215 222 M286 104 L215 222" />
+                    <path class="graph-line faint" d="M165 72 L360 194 M72 150 L286 104" />
+                    <circle class="graph-node node-teal" cx="72" cy="150" r="19" />
+                    <circle class="graph-node node-ink" cx="165" cy="72" r="24" />
+                    <circle class="graph-node node-warm" cx="286" cy="104" r="17" />
+                    <circle class="graph-node node-teal" cx="360" cy="194" r="22" />
+                    <circle class="graph-node node-ink" cx="215" cy="222" r="29" />
+                    <text x="41" y="188">Student</text><text x="139" y="39">Course</text>
+                    <text x="270" y="78">Faculty</text><text x="334" y="236">Graph</text>
+                </svg>
+            </div>
+        </section>
+    """, unsafe_allow_html=True)
+    st.button("Begin experiment", type="primary", on_click=go_to_simulation, key="begin_experiment")
+
+
+def render_graph_concept_diagram():
+    """Adds one compact visual explanation to the textbook introduction."""
+    st.markdown("""
+        <div class="concept-diagram">
+            <div><span class="diagram-node">NODE</span><small>entity</small></div>
+            <div class="diagram-arrow">→<small>relationship</small></div>
+            <div><span class="diagram-node accent">NODE</span><small>entity</small></div>
+            <div class="diagram-arrow">→<small>traversal</small></div>
+            <div><span class="diagram-node warm">NODE</span><small>entity</small></div>
+        </div>
+    """, unsafe_allow_html=True)
+
 
 def render_theory_section():
     """Renders Section 1: Theory, Background, Architecture, Cypher, and Procedure."""
-    st.header("Theoretical Framework: Graph Databases & Neo4j")
-
-    st.info(f"**Aim:** {THEORY_CONTENT['aim']}", icon="🎯")
+    st.markdown('<div class="manual-kicker">01 / Theoretical Framework</div>', unsafe_allow_html=True)
+    st.header("Graph Databases & Neo4j")
+    st.markdown('<div class="manual-intro"><strong>Aim</strong><br>' + THEORY_CONTENT["aim"] + '</div>', unsafe_allow_html=True)
 
     st.subheader("Learning Objectives")
     for i, obj in enumerate(THEORY_CONTENT["learning_objectives"]):
-        st.write(f"- ✅ {obj}")
+        st.write(f"{i + 1}. {obj}")
 
     st.divider()
 
@@ -881,11 +1170,12 @@ def render_theory_section():
     ])
 
     with tabs[0]:
+        render_graph_concept_diagram()
         st.markdown(THEORY_CONTENT["introduction"])
     
     with tabs[1]:
         st.markdown(THEORY_CONTENT["rdbms_vs_graph"])
-        st.success("**Key Takeaway**: Index-Free Adjacency (IFA) ensures that graph traversal performance remains constant regardless of the total database size.", icon="💡")
+        st.markdown('<div class="manual-intro"><strong>Key takeaway</strong><br>Index-Free Adjacency (IFA) keeps graph traversal proportional to the path being explored, rather than the total database size.</div>', unsafe_allow_html=True)
 
     with tabs[2]:
         st.markdown(THEORY_CONTENT["neo4j_architecture"])
@@ -900,7 +1190,7 @@ def render_theory_section():
         for step in THEORY_CONTENT["procedure"]:
             st.write(f"- {step}")
         st.divider()
-        st.warning("**Precautions:**", icon="⚠️")
+        st.markdown('<div class="manual-label">Precautions and Common Mistakes</div>', unsafe_allow_html=True)
         st.markdown(THEORY_CONTENT["precautions"])
 
     with tabs[5]:
@@ -914,35 +1204,29 @@ def render_theory_section():
 
 def render_simulation_section():
     """Renders Section 2: Interactive Graph Sandbox, Visual UI Controls, Cypher Console, Visualizer & Logger."""
-    st.header("Interactive Graph Database Sandbox (Simulation)")
-    st.info(
-        "Explore graph database management using the embedded in-memory Cypher engine. "
-        "Create entities visually or write native Cypher queries to build, manipulate, and analyze the graph."
-    )
+    st.markdown('<div class="manual-kicker">02 / Laboratory Workstation</div>', unsafe_allow_html=True)
+    st.header("Interactive Simulation")
+    st.markdown('<div class="manual-intro">Create entities, establish directed relationships, and execute Cypher against the embedded graph engine. Observe each change in the topology below.</div>', unsafe_allow_html=True)
 
     graph: PropertyGraph = st.session_state["graph"]
     engine: CypherEngine = st.session_state["cypher_engine"]
 
-    # Graph Metrics Row (moved up for prominence)
+    # Compact observation record keeps the graph, not dashboard tiles, as the focus.
     metrics = graph.get_metrics()
-    with st.container(border=True):
-        m1, m2, m3, m4, m5 = st.columns(5)
-        with m1:
-            st.metric("Total Nodes", f"{metrics['num_nodes']}")
-        with m2:
-            st.metric("Relationships", f"{metrics['num_relationships']}")
-        with m3:
-            st.metric("Distinct Labels", f"{metrics['num_labels']}")
-        with m4:
-            st.metric("Rel Types", f"{metrics['num_rel_types']}")
-        with m5:
-            st.metric("Graph Density", f"{metrics['density']}")
+    st.markdown(
+        f'<div class="manual-label">Current Graph Record</div>'
+        f'<p><strong>{metrics["num_nodes"]}</strong> nodes &nbsp;&nbsp; '
+        f'<strong>{metrics["num_relationships"]}</strong> relationships &nbsp;&nbsp; '
+        f'<strong>{metrics["num_labels"]}</strong> labels &nbsp;&nbsp; '
+        f'<strong>{metrics["density"]}</strong> density</p>',
+        unsafe_allow_html=True
+    )
 
     st.write("")
     
     # Top Control Bar: Presets and Reset
     with st.container(border=True):
-        st.subheader("Graph Control Panel")
+        st.markdown('<div class="manual-label">Graph Controls</div>', unsafe_allow_html=True)
         col_preset1, col_preset2, col_reset = st.columns([2.5, 1.5, 1.2])
 
         with col_preset1:
@@ -1004,7 +1288,7 @@ def render_simulation_section():
     # ----------------------------------------------------------------------------------
     with tab_cypher:
         with st.container(border=True):
-            st.subheader("Cypher Query Execution Console")
+            st.markdown('<div class="manual-label">Cypher Query</div>', unsafe_allow_html=True)
             st.caption("Execute declarative Cypher queries against the in-memory graph. Supported: MATCH, CREATE, SET, DELETE, DETACH DELETE, WHERE, aggregations.")
 
         cypher_examples = {
@@ -1287,43 +1571,46 @@ def render_simulation_section():
     # ----------------------------------------------------------------------------------
     # GRAPH VISUALIZATION & VIEW CONTROLS
     # ----------------------------------------------------------------------------------
-    st.subheader("Real-Time Graph Visualization")
-
-    col_v1, col_v2, col_v3 = st.columns([2, 2, 2])
-    with col_v1:
-        layout_opt = st.selectbox(
-            "Graph Layout Algorithm:",
-            options=["Spring (Force-Directed)", "Circular", "Kamada-Kawai", "Shell"],
-            index=0
-        )
-    with col_v2:
-        label_opt = st.selectbox(
-            "Node Display Labels:",
-            options=["Name / Label", "Name Only", "Node ID", "Label Only"],
-            index=0
-        )
-    with col_v3:
-        st.write("")
-        st.write("")
+    st.markdown('<div class="manual-label">Interactive Graph</div>', unsafe_allow_html=True)
+    st.subheader("Topology and Relationships")
+    
+    view_col, _, highlight_col = st.columns([3, 2, 1.5])
+    with view_col:
+        view_mode = st.radio("Graph Rendering Engine:", ["Interactive Neo4j Canvas (Recommended)", "Static Plotly Layout"], horizontal=True, label_visibility="collapsed")
+    with highlight_col:
         if st.button("Clear Highlighting", use_container_width=True):
             st.session_state["matched_node_ids"] = []
             st.session_state["matched_rel_ids"] = []
             st.rerun()
 
-    fig = render_graph_figure(
-        graph=graph,
-        matched_node_ids=st.session_state.get("matched_node_ids"),
-        matched_rel_ids=st.session_state.get("matched_rel_ids"),
-        layout_algorithm=layout_opt,
-        node_label_mode=label_opt
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    if view_mode == "Interactive Neo4j Canvas (Recommended)":
+        render_interactive_graph_canvas(
+            graph=graph,
+            matched_node_ids=st.session_state.get("matched_node_ids"),
+            matched_rel_ids=st.session_state.get("matched_rel_ids")
+        )
+    else:
+        # Fallback to Plotly with options
+        pc1, pc2 = st.columns(2)
+        with pc1:
+            layout_opt = st.selectbox("Plotly Layout:", ["Spring (Force-Directed)", "Kamada-Kawai", "Circular", "Shell"], index=0)
+        with pc2:
+            label_opt = st.selectbox("Node Display:", ["Name / Label", "Name Only", "Node ID", "Label Only"], index=0)
+        fig = render_graph_figure(
+            graph=graph,
+            matched_node_ids=st.session_state.get("matched_node_ids"),
+            matched_rel_ids=st.session_state.get("matched_rel_ids"),
+            layout_algorithm=layout_opt,
+            node_label_mode=label_opt
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
     # ----------------------------------------------------------------------------------
     # EXPERIMENTAL DATA LOGGER
     # ----------------------------------------------------------------------------------
     st.divider()
-    st.subheader("Experimental Data Log Book")
+    st.markdown('<div class="manual-label">Experimental Data Log</div>', unsafe_allow_html=True)
+    st.subheader("Observation Sheet")
     st.caption("Record parameters, queries, and graph behavior across trials for inclusion in your official lab report.")
 
     col_log1, col_log2 = st.columns([1.8, 3.2])
@@ -1364,13 +1651,19 @@ def render_simulation_section():
 
 def render_quiz_section():
     """Renders Section 3: Assessment Quiz with Self-Grading and Feedback."""
-    st.header("Concept Assessment Quiz")
-    st.write("Evaluate your mastery of Graph Databases, the Property Graph Model, Cypher query syntax, and Neo4j architecture.")
+    st.markdown('<div class="manual-kicker">03 / Knowledge Check</div>', unsafe_allow_html=True)
+    st.header("Practical Assessment")
+    st.markdown('<div class="manual-intro">Test your understanding of graph databases, Neo4j architecture, and Cypher query syntax.</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="manual-label">Assessment / {len(QUIZ_QUESTIONS)} questions</div>'
+        f'<div class="quiz-progress"><span style="width: {100 / len(QUIZ_QUESTIONS):.2f}%"></span></div>',
+        unsafe_allow_html=True
+    )
 
     with st.form("graph_lab_quiz_form"):
         user_responses = {}
         for q in QUIZ_QUESTIONS:
-            with st.container(border=True):
+            with st.container():
                 st.markdown(f"**Question {q['id']}:** {q['question']}")
                 selected = st.radio(
                     label=f"Options for Question {q['id']}:",
@@ -1380,6 +1673,7 @@ def render_quiz_section():
                     label_visibility="collapsed"
                 )
                 user_responses[q["id"]] = q["options"].index(selected)
+            st.divider()
         
         st.write("")
         submitted = st.form_submit_button("Submit Quiz for Evaluation", type="primary")
@@ -1394,7 +1688,7 @@ def render_quiz_section():
         for q in QUIZ_QUESTIONS:
             user_ans = user_responses.get(q["id"])
             correct_ans = q["answer_index"]
-            with st.container(border=True):
+            with st.container():
                 if user_ans == correct_ans:
                     score += 1
                     st.success(f"**Question {q['id']}: Correct!**", icon="✅")
@@ -1408,25 +1702,26 @@ def render_quiz_section():
         st.session_state["quiz_score"] = score
         perc = (score / len(QUIZ_QUESTIONS)) * 100
         
+        st.markdown('<div class="manual-label">Assessment Complete</div>', unsafe_allow_html=True)
         if perc == 100:
-            st.balloons()
-            st.success(f"🎉 **Perfect Score!** You got {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%)", icon="🏆")
+            st.success(f"Perfect score: {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%). Your responses have been recorded.")
         elif perc >= 70:
-            st.info(f"**Great Job!** Final Score: {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%)", icon="👍")
+            st.info(f"Assessment recorded: {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%). Review the explanations below.")
         else:
-            st.warning(f"**Keep Trying!** Final Score: {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%)", icon="📚")
+            st.warning(f"Assessment recorded: {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%). Revisit the theory and try again.")
 
     elif st.session_state.get("quiz_submitted", False):
-        st.success(f"Quiz already submitted. Current score: **{st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}**", icon="✅")
+        st.success(f"Assessment already submitted. Current score: **{st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}**")
 
 
 def render_report_section():
     """Renders Section 4: Dynamic Lab Report Generator with Guaranteed PDF Export."""
-    st.header("Report Generation")
-    st.write("Compile your student details, experimental graph benchmark trials, and quiz evaluation into an official PDF report.")
+    st.markdown('<div class="manual-kicker">04 / Record Submission</div>', unsafe_allow_html=True)
+    st.header("Experiment Report")
+    st.markdown('<div class="manual-intro">Compile your student details, observations, experimental log, and assessment result into the practical record.</div>', unsafe_allow_html=True)
 
     with st.container(border=True):
-        st.subheader("Student Details")
+        st.markdown('<div class="manual-label">Student Information</div>', unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
         with col1:
             student_name = st.text_input("Student Name", value=st.session_state["student_info"].get("name", "Student Name"))
@@ -1440,7 +1735,7 @@ def render_report_section():
     st.session_state["student_info"]["date"] = str(lab_date)
 
     with st.container(border=True):
-        st.subheader("Discussion & Observations")
+        st.markdown('<div class="manual-label">Observations</div>', unsafe_allow_html=True)
         student_notes = st.text_area(
             "Enter your interpretation of results, observations, and conclusions:",
             value=st.session_state.get("student_notes", (
@@ -1459,14 +1754,18 @@ def render_report_section():
     st.divider()
     
     with st.container(border=True):
-        st.subheader("Report Summary Preview")
+        st.markdown('<div class="manual-label">Report Preview</div>', unsafe_allow_html=True)
         st.markdown(f"**Experiment:** {EXPERIMENT_CONFIG['title']} ({EXPERIMENT_CONFIG['lab_code']})")
         
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Student", student_name)
-        c2.metric("Roll No", student_id)
-        c3.metric("Graph Nodes", graph_metrics['num_nodes'])
-        c4.metric("Quiz Score", f"{st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}")
+        st.markdown(
+            f'<div class="report-facts">'
+            f'<div class="report-fact"><small>Student</small><strong>{student_name}</strong></div>'
+            f'<div class="report-fact"><small>Roll / ID</small><strong>{student_id}</strong></div>'
+            f'<div class="report-fact"><small>Graph nodes</small><strong>{graph_metrics["num_nodes"]}</strong></div>'
+            f'<div class="report-fact"><small>Assessment</small><strong>{st.session_state.get("quiz_score", 0)} / {len(QUIZ_QUESTIONS)}</strong></div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
         if not trials_df.empty:
             st.dataframe(trials_df, hide_index=True, use_container_width=True)
@@ -1493,7 +1792,7 @@ def render_report_section():
         f.write(pdf_bytes)
 
     with st.container(border=True):
-        st.subheader("Download Official Lab Report (.pdf)")
+        st.markdown('<div class="manual-label">Export</div>', unsafe_allow_html=True)
         st.caption("Your personalized PDF report is ready to be downloaded and submitted.")
         col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
@@ -1562,35 +1861,292 @@ def main():
 
     init_session_state()
 
-    # Native Streamlit Title (No custom CSS)
-    st.title(EXPERIMENT_CONFIG["title"])
-    st.caption(f"**Virtual Laboratory Experiment** | {EXPERIMENT_CONFIG['course']} ({EXPERIMENT_CONFIG['lab_code']})")
+    # --- SINGLE APPLICATION THEME ---
+    st.markdown("""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+        :root {
+            --paper: #0b1220;
+            --surface: #111b2d;
+            --ink: #e8eef8;
+            --muted: #91a0b8;
+            --line: #26344b;
+            --accent: #22d3c7;
+            --accent-soft: rgba(34, 211, 199, 0.12);
+            --violet: #7c6cf6;
+            --warm: #f0a36a;
+        }
+
+        /* Main background and reading measure */
+        .stApp {
+            background-color: var(--paper);
+            background-image: radial-gradient(circle at 78% 0%, rgba(124,108,246,0.16), transparent 31rem), radial-gradient(circle at 12% 15%, rgba(34,211,199,0.10), transparent 26rem), radial-gradient(rgba(150, 170, 200, 0.12) 1px, transparent 1px);
+            background-size: auto, auto, 24px 24px;
+            background-position: center, center, 0 0;
+            color: var(--ink);
+            font-family: 'Inter', sans-serif;
+        }
+        [data-testid="stHeader"], .stApp > header { background: transparent !important; }
+        [data-testid="stToolbar"] { background: transparent !important; }
+        .main .block-container {
+            max-width: 1440px;
+            padding: 2.6rem 4.5rem 5rem;
+        }
+        h1, h2, h3, h4 {
+            color: var(--ink) !important;
+            font-family: 'Space Grotesk', sans-serif !important;
+            letter-spacing: 0 !important;
+        }
+        h1 { font-size: 2.15rem !important; line-height: 1.15 !important; }
+        h2 { font-size: 1.55rem !important; margin-top: 2rem !important; }
+        h3 { font-size: 1.12rem !important; }
+        p, li, label, [data-testid="stMarkdownContainer"] { color: var(--ink); }
+        .stCaption, [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
+
+        /* Manual cover header */
+        .vlab-header {
+            background: linear-gradient(135deg, rgba(17,27,45,0.96), rgba(18,27,50,0.88));
+            border: 1px solid var(--line);
+            border-top: 2px solid var(--accent);
+            border-radius: 18px;
+            box-shadow: 0 18px 70px rgba(0,0,0,0.25);
+            padding: 2rem 2.4rem 1.8rem;
+            margin-bottom: 2.7rem;
+        }
+        .vlab-header h1 {
+            color: var(--ink) !important;
+            margin: 0;
+            font-size: 2rem !important;
+            font-weight: 700 !important;
+        }
+        .hero-eyebrow { color: var(--accent); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+        .experiment-cover .hero-eyebrow { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+        .hero-dot { display: inline-block; width: 7px; height: 7px; margin-right: 0.55rem; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); vertical-align: 1px; }
+        .hero-title-row { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin-top: 0.75rem; }
+        .hero-title-row h1 { margin: 0 !important; }
+        .hero-badge { background: linear-gradient(135deg, var(--accent), var(--violet)); color: #07111e; padding: 0.35rem 0.75rem; border-radius: 999px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; white-space: nowrap; }
+        .vlab-header p.subtitle {
+            color: var(--muted);
+            font-size: 0.98rem;
+            margin: 0.7rem 0 0;
+        }
+        .vlab-header span.badge {
+            background: var(--accent-soft);
+            color: var(--accent);
+            padding: 0.25rem 0.55rem;
+            border-radius: 2px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            white-space: nowrap;
+            margin-left: 0.75rem;
+            vertical-align: middle;
+        }
+
+        .manual-kicker, .manual-label {
+            color: var(--accent) !important;
+            font-size: 0.72rem !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.13em !important;
+            text-transform: uppercase;
+        }
+        .manual-intro {
+            border-left: 3px solid var(--accent);
+            padding: 0.55rem 1rem;
+            margin: 1.1rem 0 2rem;
+            background: rgba(231, 239, 237, 0.55);
+        }
+        .experiment-cover {
+            display: grid;
+            grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+            gap: 2rem;
+            align-items: center;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-top: 3px solid var(--accent);
+            padding: 2.6rem 2.8rem;
+            margin: 1.6rem 0 1.8rem;
+        }
+        .experiment-cover h2 {
+            font-size: clamp(2rem, 4vw, 3.35rem) !important;
+            line-height: 1.05 !important;
+            margin: 0.7rem 0 1rem !important;
+        }
+        .cover-copy p { max-width: 34rem; color: var(--muted); font-size: 1.02rem; line-height: 1.65; }
+        .cover-meta { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; color: var(--muted); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+        .cover-meta span { border-left: 2px solid var(--accent); padding-left: 0.55rem; }
+        .cover-visual { min-height: 250px; display: grid; place-items: center; background: #f2f5f1; border: 1px solid var(--line); }
+        .cover-visual svg { width: 100%; max-width: 430px; height: auto; }
+        .graph-line { fill: none; stroke: #9bb6b1; stroke-width: 2; stroke-dasharray: 5 5; }
+        .graph-line.faint { stroke: #c7d4d0; }
+        .graph-node { fill: #20252b; stroke: #f2f5f1; stroke-width: 6; }
+        .graph-node.node-teal { fill: #1e5b61; }
+        .graph-node.node-warm { fill: #b26a3d; }
+        .cover-visual text { fill: #68717a; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.04em; }
+        .concept-diagram { display: flex; align-items: center; justify-content: center; gap: 1.2rem; padding: 1.4rem 1rem; margin: 0.5rem 0 2rem; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+        .concept-diagram > div { display: grid; gap: 0.35rem; justify-items: center; }
+        .concept-diagram small { color: var(--muted); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
+        .diagram-node { display: inline-flex; align-items: center; justify-content: center; width: 4.8rem; height: 2.8rem; border: 2px solid var(--ink); color: var(--ink); font: 600 0.72rem 'IBM Plex Mono', monospace; }
+        .diagram-node.accent { border-color: var(--accent); color: var(--accent); }
+        .diagram-node.warm { border-color: var(--warm); color: var(--warm); }
+        .diagram-arrow { color: var(--accent); font-size: 1.5rem; }
+        .diagram-arrow small { display: block; font-size: 0.6rem; text-align: center; }
+        .report-facts { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 1.2rem 0 1.6rem; }
+        .report-fact { padding: 0.85rem 1rem; border-right: 1px solid var(--line); }
+        .report-fact:last-child { border-right: 0; }
+        .report-fact small { display: block; color: var(--muted); font-size: 0.67rem; letter-spacing: 0.1em; text-transform: uppercase; }
+        .report-fact strong { display: block; margin-top: 0.35rem; color: var(--ink); font-size: 1.05rem; overflow-wrap: anywhere; }
+        .quiz-progress { height: 4px; background: var(--line); margin: 1.2rem 0 2rem; }
+        .quiz-progress span { display: block; height: 100%; background: var(--accent); }
+        @media (max-width: 800px) {
+            .main .block-container { padding: 1.4rem 1.2rem 3rem; }
+            .experiment-cover { grid-template-columns: 1fr; padding: 1.6rem; }
+            .cover-visual { min-height: 190px; }
+            .report-facts { grid-template-columns: repeat(2, 1fr); }
+            .report-fact:nth-child(2) { border-right: 0; }
+            .report-fact:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+        }
+
+        /* Framed tools only; ordinary content stays on the page */
+        .lab-card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 1.35rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Streamlit widgets */
+        .stButton>button {
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            color: var(--ink);
+            background: rgba(17,27,45,0.8);
+            font-weight: 600;
+            min-height: 2.4rem;
+        }
+        .stButton>button[kind="primary"] {
+            background: linear-gradient(135deg, var(--accent), var(--violet));
+            border-color: transparent;
+            color: #07111e;
+        }
+        .stButton>button:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); box-shadow: 0 8px 22px rgba(34,211,199,0.12); }
+        .stButton>button[kind="primary"]:hover { background: linear-gradient(135deg, #42e2d7, #9387ff); color: #07111e; }
+        [data-testid="stTextArea"] textarea {
+            font-family: 'IBM Plex Mono', monospace !important;
+            border-radius: 2px !important;
+            background: #fbfaf6 !important;
+        }
+        [data-testid="stTabs"] [role="tablist"] {
+            gap: 1.25rem;
+            border-bottom: 1px solid var(--line);
+        }
+        [data-testid="stTabs"] button[role="tab"] {
+            color: var(--muted);
+            font-weight: 600;
+            padding: 0.75rem 0.1rem;
+        }
+        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+            color: var(--accent);
+        }
+        [data-testid="stTabs"] button[role="tab"][aria-selected="true"]::after {
+            background: var(--accent);
+            height: 3px;
+        }
+        [data-testid="stDataFrame"] { border: 1px solid var(--line); }
+
+        /* Manual index sidebar */
+        [data-testid="stSidebar"] {
+            background: rgba(8, 15, 28, 0.96);
+            border-right: 1px solid var(--line);
+        }
+        [data-testid="stSidebar"] .block-container { padding: 2rem 1.4rem; }
+        .sidebar-brand {
+            color: var(--accent);
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.65rem;
+        }
+        .sidebar-code {
+            color: var(--muted);
+            font-size: 0.72rem;
+            line-height: 1.55;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 2.2rem;
+        }
+        [data-testid="stSidebar"] [role="radiogroup"] label { padding: 0.25rem 0; }
+        [data-testid="stSidebar"] [role="radiogroup"] input[type="radio"] { position: absolute; opacity: 0; width: 1px; height: 1px; }
+        [data-testid="stSidebar"] [role="radiogroup"] label > div { border-radius: 10px; padding: 0.58rem 0.7rem; transition: background 160ms ease, color 160ms ease; }
+        [data-testid="stSidebar"] [role="radiogroup"] label:hover > div { background: rgba(34,211,199,0.09); }
+        [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) > div { background: linear-gradient(90deg, rgba(34,211,199,0.16), rgba(124,108,246,0.10)); color: var(--accent); box-shadow: inset 3px 0 var(--accent); }
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] { color: var(--muted); }
+        .sidebar-stat { border: 1px solid var(--line); border-radius: 10px; background: rgba(17,27,45,0.72); padding: 0.65rem 0.75rem; margin: 0.5rem 0; }
+        .sidebar-stat-label { display: block; color: var(--muted); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+        .sidebar-stat-value { display: block; color: var(--accent); font-size: 0.9rem; font-weight: 700; margin-top: 0.2rem; }
+        [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-testid="stSelectbox"] div[data-baseweb="select"] > div, [data-testid="stDateInput"] input { background: rgba(8,15,28,0.72) !important; color: var(--ink) !important; border-color: var(--line) !important; border-radius: 10px !important; }
+        [data-testid="stTextInput"] input:focus, [data-testid="stTextArea"] textarea:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 1px var(--accent) !important; }
+        [data-testid="stAlert"] { border: 1px solid var(--line); border-radius: 12px; background: rgba(17,27,45,0.8); }
+        [data-testid="stTabs"] [role="tablist"] { gap: 0.5rem; border-bottom: 1px solid var(--line); }
+        [data-testid="stTabs"] button[role="tab"] { border-radius: 9px 9px 0 0; padding: 0.7rem 0.8rem; transition: background 160ms ease; }
+        [data-testid="stTabs"] button[role="tab"]:hover { background: rgba(34,211,199,0.08); }
+        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] { background: rgba(34,211,199,0.10); color: var(--accent); }
+        [data-testid="stTabs"] button[role="tab"][aria-selected="true"]::after { background: linear-gradient(90deg, var(--accent), var(--violet)); height: 3px; }
+        [data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+        [data-testid="stDataFrame"] iframe { background: var(--surface); }
+        [data-testid="stFormSubmitButton"] button { border-radius: 10px; }
+        .manual-intro { background: rgba(34,211,199,0.07); border-left-color: var(--accent); border-radius: 0 10px 10px 0; }
+        .experiment-cover { background: linear-gradient(135deg, rgba(17,27,45,0.96), rgba(23,28,57,0.9)); border-color: var(--line); border-radius: 16px; }
+        .cover-visual { background: rgba(8,15,28,0.55); border-color: var(--line); border-radius: 12px; }
+        .graph-line { stroke: rgba(34,211,199,0.65); }
+        .graph-line.faint { stroke: rgba(124,108,246,0.45); }
+        .graph-node { stroke: #111b2d; }
+        .cover-visual text { fill: var(--muted); }
+        .concept-diagram, .report-facts { border-color: var(--line); }
+        .diagram-node { border-color: var(--ink); color: var(--ink); }
+        .report-fact { border-color: var(--line); }
+        .report-fact strong { color: var(--accent); }
+        .quiz-progress { background: var(--line); }
+        .quiz-progress span { background: linear-gradient(90deg, var(--accent), var(--violet)); }
+        </style>
+    """, unsafe_allow_html=True)
 
     # Navigation Sidebar
+    st.sidebar.markdown('<div class="sidebar-brand">VIRTUAL LAB</div>', unsafe_allow_html=True)
+    st.sidebar.markdown(f'<div class="sidebar-code">Database Management Systems<br>{EXPERIMENT_CONFIG["lab_code"]}</div>', unsafe_allow_html=True)
+    
+    navigation_options = ["01  Theory", "02  Simulation", "03  Knowledge Check", "04  Experiment Report"]
+    requested_section = st.session_state.get("requested_section", navigation_options[0])
     section = st.sidebar.radio(
-        "Lab Navigator",
-        options=["Theory", "Simulation", "Quiz", "Report Generation"]
+        "Navigation",
+        options=navigation_options,
+        index=navigation_options.index(requested_section),
+        label_visibility="collapsed"
     )
+    st.session_state["requested_section"] = section
 
     st.sidebar.divider()
-    st.sidebar.subheader("Progress Tracker")
+    st.sidebar.markdown('<div class="manual-label">Session Record</div>', unsafe_allow_html=True)
     quiz_status = "Done" if st.session_state.get("quiz_submitted", False) else "Pending"
-    st.sidebar.write(f"- **Quiz Status:** {quiz_status}")
+    st.sidebar.markdown(f'<div class="sidebar-stat"><span class="sidebar-stat-label">Quiz status</span><span class="sidebar-stat-value">{quiz_status}</span></div>', unsafe_allow_html=True)
     if st.session_state.get("quiz_submitted", False):
-        st.sidebar.write(f"- **Quiz Score:** `{st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}`")
+        st.sidebar.markdown(f'<div class="sidebar-stat"><span class="sidebar-stat-label">Quiz score</span><span class="sidebar-stat-value">{st.session_state.get("quiz_score", 0)} / {len(QUIZ_QUESTIONS)}</span></div>', unsafe_allow_html=True)
 
-    st.sidebar.write(f"- **Recorded Trials:** `{len(st.session_state.get('trials', []))}`")
+    st.sidebar.markdown(f'<div class="sidebar-stat"><span class="sidebar-stat-label">Recorded trials</span><span class="sidebar-stat-value">{len(st.session_state.get("trials", []))}</span></div>', unsafe_allow_html=True)
     m = st.session_state["graph"].get_metrics()
-    st.sidebar.write(f"- **Graph Size:** `{m['num_nodes']} nodes, {m['num_relationships']} rels`")
+    st.sidebar.markdown(f'<div class="sidebar-stat"><span class="sidebar-stat-label">Graph size</span><span class="sidebar-stat-value">{m["num_nodes"]} nodes · {m["num_relationships"]} rels</span></div>', unsafe_allow_html=True)
 
     # Section Dispatcher
-    if section == "Theory":
+    if section == "01  Theory":
+        render_experiment_cover()
         render_theory_section()
-    elif section == "Simulation":
+    elif section == "02  Simulation":
         render_simulation_section()
-    elif section == "Quiz":
+    elif section == "03  Knowledge Check":
         render_quiz_section()
-    elif section == "Report Generation":
+    elif section == "04  Experiment Report":
         render_report_section()
 
 
