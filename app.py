@@ -14,8 +14,11 @@ Note: Streamlit-native components are strictly used to render seamlessly in both
 
 import os
 import time
+import warnings
 from datetime import datetime
 from typing import Dict, List, Any, Optional
+
+warnings.filterwarnings("ignore", message=".*st.components.v1.html.*")
 
 import numpy as np
 import pandas as pd
@@ -598,29 +601,217 @@ def generate_pdf_report(student_name: str, student_id: str, date_str: str,
 
 
 # ======================================================================================
-# 4. PLOTLY GRAPH VISUALIZER
+# 4. GRAPH PRESETS, SCHEMAS & VISUALIZERS
 # ======================================================================================
+
+PRESET_SCHEMAS = {
+    "University Academic Knowledge Graph (Default)": {
+        "node_labels": ["Student", "Course", "Faculty", "Department", "Project", "Custom..."],
+        "default_properties": {
+            "Student": {"id_prefix": "s_", "name": "Kiran Patel", "key1": "dept", "val1": "CSE", "key2": "gpa", "val2": "3.80"},
+            "Course": {"id_prefix": "cs_", "name": "Machine Learning", "key1": "code", "val1": "CS401", "key2": "credits", "val2": "4"},
+            "Faculty": {"id_prefix": "prof_", "name": "Prof. V. Rao", "key1": "dept", "val1": "CSE", "key2": "role", "val2": "Professor"},
+            "Department": {"id_prefix": "dept_", "name": "Information Technology", "key1": "code", "val1": "IT", "key2": "building", "val2": "Aryabhatta"},
+            "Project": {"id_prefix": "proj_", "name": "Graph Neural Networks", "key1": "domain", "val1": "AI", "key2": "budget", "val2": "150000"},
+            "Custom...": {"id_prefix": "custom_", "name": "Custom Entity", "key1": "type", "val1": "General", "key2": "status", "val2": "Active"},
+        },
+        "rel_types": ["ENROLLED_IN", "TEACHES", "PREREQUISITE_OF", "BELONGS_TO", "ADVISES", "OFFERED_BY", "Custom..."],
+        "default_rel_properties": {
+            "ENROLLED_IN": {"key": "grade", "val": "A"},
+            "TEACHES": {"key": "academic_year", "val": "2024-25"},
+            "PREREQUISITE_OF": {"key": "mandatory", "val": "True"},
+            "BELONGS_TO": {"key": "since", "val": "2018"},
+            "ADVISES": {"key": "project", "val": "Graph Optimization"},
+            "OFFERED_BY": {"key": "semester", "val": "Autumn"},
+            "Custom...": {"key": "weight", "val": "1.0"},
+        },
+        "presentation_example": {
+            "title": "Add ResearchLab Entity (University Academic Graph)",
+            "scenario": "Demonstrate adding a new Research Laboratory entity and linking a Faculty member as director.",
+            "label": "ResearchLab",
+            "id": "lab_nlp",
+            "name": "NLP & AI Research Lab",
+            "key1": "director",
+            "val1": "Prof. S. Banerjee",
+            "key2": "grants_inr",
+            "val2": "5000000",
+            "followup": "Connect prof_banerjee -[:DIRECTS]-> lab_nlp"
+        },
+        "cypher_examples": {
+            "-- Select an Educational Cypher Example --": "",
+            "1. Match all nodes and inspect entire graph": "MATCH (n) RETURN n",
+            "2. Match enrolled students and their courses": "MATCH (s:Student)-[:ENROLLED_IN]->(c:Course) RETURN s.name, c.name, s.gpa",
+            "3. Filter high-performing students (WHERE clause)": "MATCH (s:Student) WHERE s.gpa >= 3.5 RETURN s.name, s.dept, s.gpa",
+            "4. Multi-hop traversal: Faculty teaching enrolled students": "MATCH (f:Faculty)-[:TEACHES]->(c:Course)<-[:ENROLLED_IN]-(s:Student) RETURN f.name, c.name, s.name",
+            "5. Aggregate enrollment counts per course (count)": "MATCH (c:Course)<-[:ENROLLED_IN]-(s:Student) RETURN c.name, count(s) AS total_enrolled",
+            "6. Prerequisite chain traversal (Course -> Course)": "MATCH (c1:Course)-[:PREREQUISITE_OF]->(c2:Course) RETURN c1.name, c2.name",
+            "7. CREATE a new Student node": "CREATE (s:Student {id: 's_kiran', name: 'Kiran Patel', dept: 'CSE', gpa: 3.78}) RETURN s",
+            "8. Connect new Student to Course (CREATE relationship)": "MATCH (s:Student {id: 's_kiran'}), (c:Course {name: 'Database Management Systems'}) CREATE (s)-[:ENROLLED_IN {grade: 'A', semester: '5th'}]->(c) RETURN s, c",
+            "9. Update student GPA using SET": "MATCH (s:Student {id: 's_kiran'}) SET s.gpa = 3.92 RETURN s",
+            "10. Safely remove student using DETACH DELETE": "MATCH (s:Student {id: 's_kiran'}) DETACH DELETE s"
+        }
+    },
+    "Social Network & Friendships": {
+        "node_labels": ["Person", "Group", "Topic", "Event", "Custom..."],
+        "default_properties": {
+            "Person": {"id_prefix": "p_", "name": "Elena Rostova", "key1": "city", "val1": "Mumbai", "key2": "age", "val2": "25"},
+            "Group": {"id_prefix": "g_", "name": "Deep Learning Club", "key1": "members_count", "val1": "220", "key2": "category", "val2": "Technology"},
+            "Topic": {"id_prefix": "i_", "name": "Knowledge Graphs", "key1": "domain", "val1": "Databases", "key2": "level", "val2": "Advanced"},
+            "Event": {"id_prefix": "e_", "name": "Graph Summit 2024", "key1": "location", "val1": "Virtual", "key2": "attendees", "val2": "500"},
+            "Custom...": {"id_prefix": "custom_", "name": "Custom Entity", "key1": "category", "val1": "Social", "key2": "active", "val2": "True"},
+        },
+        "rel_types": ["FRIENDS_WITH", "MEMBER_OF", "INTERESTED_IN", "FOLLOWS", "ORGANIZED", "Custom..."],
+        "default_rel_properties": {
+            "FRIENDS_WITH": {"key": "since", "val": "2023"},
+            "MEMBER_OF": {"key": "role", "val": "Moderator"},
+            "INTERESTED_IN": {"key": "level", "val": "Expert"},
+            "FOLLOWS": {"key": "since", "val": "2024"},
+            "ORGANIZED": {"key": "role", "val": "Lead Organizer"},
+            "Custom...": {"key": "weight", "val": "1.0"},
+        },
+        "presentation_example": {
+            "title": "Add CommunityLeader Entity (Social Graph)",
+            "scenario": "Demonstrate adding a new influencer or community leader and linking them to existing social groups.",
+            "label": "Person",
+            "id": "p_elena",
+            "name": "Elena Rostova",
+            "key1": "city",
+            "val1": "Mumbai",
+            "key2": "followers",
+            "val2": "12500",
+            "followup": "Connect p_elena -[:MEMBER_OF]-> g_ai"
+        },
+        "cypher_examples": {
+            "-- Select an Educational Cypher Example --": "",
+            "1. Match all people and their cities": "MATCH (p:Person) RETURN p.name, p.city, p.age",
+            "2. Find friendships in network": "MATCH (p1:Person)-[:FRIENDS_WITH]->(p2:Person) RETURN p1.name, p2.name",
+            "3. Group memberships by person": "MATCH (p:Person)-[m:MEMBER_OF]->(g:Group) RETURN p.name, g.name, m.role",
+            "4. Shared topics of interest": "MATCH (p:Person)-[:INTERESTED_IN]->(t:Topic) RETURN p.name, t.name, t.domain",
+            "5. Friend-of-friend multi-hop traversal": "MATCH (p1:Person)-[:FRIENDS_WITH]->(p2:Person)-[:FRIENDS_WITH]->(p3:Person) RETURN p1.name, p3.name",
+            "6. Connect friends using CREATE": "MATCH (p1:Person {name: 'Alex'}), (p2:Person {name: 'Chris'}) CREATE (p1)-[:FRIENDS_WITH {since: 2024}]->(p2) RETURN p1, p2",
+            "7. Count members in each group": "MATCH (p:Person)-[:MEMBER_OF]->(g:Group) RETURN g.name, count(p) AS total_members",
+            "8. Delete relationship using DELETE": "MATCH (p:Person {name: 'Dan'})-[r:MEMBER_OF]->() DELETE r"
+        }
+    },
+    "Financial Fraud Detection Ring": {
+        "node_labels": ["Account", "Device", "IPAddress", "Merchant", "Custom..."],
+        "default_properties": {
+            "Account": {"id_prefix": "acc_", "name": "ACC-105", "key1": "owner", "val1": "David", "key2": "balance", "val2": "42000"},
+            "Device": {"id_prefix": "dev_", "name": "DEV-MAC-9931", "key1": "device_id", "val1": "DEV-MAC-9931", "key2": "os", "val2": "iOS 17"},
+            "IPAddress": {"id_prefix": "ip_", "name": "192.168.1.188", "key1": "ip", "val1": "192.168.1.188", "key2": "city", "val2": "Delhi"},
+            "Merchant": {"id_prefix": "merch_", "name": "CryptoPay Gateway", "key1": "category", "val1": "Crypto", "key2": "risk_score", "val2": "95"},
+            "Custom...": {"id_prefix": "custom_", "name": "Custom Entity", "key1": "risk_level", "val1": "HIGH", "key2": "status", "val2": "Flagged"},
+        },
+        "rel_types": ["USED_DEVICE", "LOGGED_FROM", "TRANSFER", "FLAGGED_WITH", "PAID_TO", "Custom..."],
+        "default_rel_properties": {
+            "USED_DEVICE": {"key": "last_login", "val": "2024-09-10"},
+            "LOGGED_FROM": {"key": "timestamp", "val": "14:32:10"},
+            "TRANSFER": {"key": "amount", "val": "8500"},
+            "FLAGGED_WITH": {"key": "risk_score", "val": "88"},
+            "PAID_TO": {"key": "amount", "val": "12000"},
+            "Custom...": {"key": "weight", "val": "1.0"},
+        },
+        "presentation_example": {
+            "title": "Add High-Risk Merchant Entity (Fraud Graph)",
+            "scenario": "Demonstrate adding a high-risk crypto merchant or mule account to investigate laundering.",
+            "label": "Merchant",
+            "id": "merch_crypto",
+            "name": "CryptoPay Ltd",
+            "key1": "risk_level",
+            "val1": "CRITICAL",
+            "key2": "license",
+            "val2": "Offshore-KYC-Bypass",
+            "followup": "Connect acc_104 -[:TRANSFER {amount: 9500}]-> merch_crypto"
+        },
+        "cypher_examples": {
+            "-- Select an Educational Cypher Example --": "",
+            "1. Match all accounts and balances": "MATCH (a:Account) RETURN a.acc_no, a.owner, a.balance",
+            "2. Detect circular money transfers (Fraud Ring)": "MATCH (a1:Account)-[t1:TRANSFER]->(a2:Account)-[t2:TRANSFER]->(a3:Account)-[t3:TRANSFER]->(a1) RETURN a1.owner, a2.owner, a3.owner, t1.amount, t2.amount, t3.amount",
+            "3. Find shared devices across accounts": "MATCH (a:Account)-[:USED_DEVICE]->(d:Device) RETURN d.device_id, count(a) AS linked_accounts",
+            "4. Trace accounts sharing same IP address": "MATCH (a:Account)-[:LOGGED_FROM]->(ip:IPAddress) RETURN ip.ip, ip.city, a.owner",
+            "5. High-value transactions filter (WHERE amount >= 4500)": "MATCH (a1:Account)-[t:TRANSFER]->(a2:Account) WHERE t.amount >= 4500 RETURN a1.owner, a2.owner, t.amount",
+            "6. Flag suspicious account with updated balance": "MATCH (a:Account {acc_no: 'ACC-104'}) SET a.balance = 0 RETURN a"
+        }
+    },
+    "Blank / Empty Graph": {
+        "node_labels": ["Entity", "User", "Concept", "Item", "Category", "Custom..."],
+        "default_properties": {
+            "Entity": {"id_prefix": "node_", "name": "Root Node", "key1": "type", "val1": "Base", "key2": "value", "val2": "100"},
+            "User": {"id_prefix": "user_", "name": "Alex", "key1": "role", "val1": "Admin", "key2": "active", "val2": "True"},
+            "Concept": {"id_prefix": "concept_", "name": "Graph Theory", "key1": "domain", "val1": "Mathematics", "key2": "difficulty", "val2": "Introductory"},
+            "Item": {"id_prefix": "item_", "name": "Item A", "key1": "sku", "val1": "SKU001", "key2": "price", "val2": "49.99"},
+            "Category": {"id_prefix": "cat_", "name": "Electronics", "key1": "code", "val1": "ELEC", "key2": "priority", "val2": "High"},
+            "Custom...": {"id_prefix": "custom_", "name": "Custom Entity", "key1": "property_key", "val1": "property_val", "key2": "status", "val2": "Active"},
+        },
+        "rel_types": ["CONNECTED_TO", "RELATES_TO", "PART_OF", "DEPENDS_ON", "LINKED_WITH", "Custom..."],
+        "default_rel_properties": {
+            "CONNECTED_TO": {"key": "weight", "val": "1.0"},
+            "RELATES_TO": {"key": "context", "val": "General"},
+            "PART_OF": {"key": "order", "val": "1"},
+            "DEPENDS_ON": {"key": "required", "val": "True"},
+            "LINKED_WITH": {"key": "since", "val": "2024"},
+            "Custom...": {"key": "weight", "val": "1.0"},
+        },
+        "presentation_example": {
+            "title": "Add Custom Node from Scratch (Blank Graph)",
+            "scenario": "Demonstrate creating custom domain entities and connecting them with directed relationships.",
+            "label": "City",
+            "id": "city_kgp",
+            "name": "Kharagpur",
+            "key1": "state",
+            "val1": "West Bengal",
+            "key2": "pin_code",
+            "val2": "721302",
+            "followup": "Add second node 'city_kolkata' and connect with CONNECTED_TO"
+        },
+        "cypher_examples": {
+            "-- Select an Educational Cypher Example --": "",
+            "1. Match all nodes in the graph": "MATCH (n) RETURN n",
+            "2. Create custom node with properties": "CREATE (n:CustomEntity {id: 'c1', name: 'Sample Entity', priority: 'High'}) RETURN n",
+            "3. Connect nodes with a relationship": "MATCH (a), (b) WHERE a.id = 'c1' AND b.id = 'c2' CREATE (a)-[:CONNECTED_TO {weight: 1.5}]->(b) RETURN a, b",
+            "4. Detach delete all nodes (Reset)": "MATCH (n) DETACH DELETE n"
+        }
+    }
+}
 
 LABEL_COLORS = {
     "Student": "#2563EB",       # Blue
     "Course": "#F59E0B",        # Amber
     "Faculty": "#10B981",       # Emerald Green
     "Department": "#8B5CF6",    # Purple
+    "Project": "#3B82F6",       # Bright Blue
     "Person": "#06B6D4",        # Cyan
     "Group": "#EC4899",         # Pink
     "Topic": "#14B8A6",         # Teal
+    "Event": "#F43F5E",         # Rose
     "Account": "#EF4444",       # Red
     "Device": "#64748B",        # Slate
-    "IPAddress": "#F97316"      # Orange
+    "IPAddress": "#F97316",     # Orange
+    "Merchant": "#DC2626",      # Crimson Red
+    "ResearchLab": "#8B5CF6",   # Violet
+    "City": "#0EA5E9",          # Sky Blue
+    "Entity": "#6366F1",        # Indigo
+    "User": "#2563EB",          # Blue
+    "Concept": "#10B981",       # Emerald
+    "Item": "#F59E0B",          # Amber
+    "Category": "#A855F7"       # Purple
 }
 DEFAULT_NODE_COLOR = "#6366F1"  # Indigo
+
+def get_node_color(label: str) -> str:
+    """Returns color for a node label with deterministic fallback."""
+    if label in LABEL_COLORS:
+        return LABEL_COLORS[label]
+    palette = ["#6366F1", "#EC4899", "#14B8A6", "#F59E0B", "#10B981", "#8B5CF6", "#06B6D4", "#F97316", "#3B82F6"]
+    return palette[abs(hash(label)) % len(palette)]
 
 
 def render_graph_figure(graph: PropertyGraph,
                          matched_node_ids: Optional[List[str]] = None,
                          matched_rel_ids: Optional[List[str]] = None,
                          layout_algorithm: str = "Spring (Force-Directed)",
-                         node_label_mode: str = "Name / Label") -> go.Figure:
+                         node_label_mode: str = "Name / Label",
+                         theme: str = "auto") -> go.Figure:
     """
     Renders an interactive 2D graph visualization using NetworkX for layout
     and Plotly for interactive rendering with hovercards and arrows.
@@ -657,7 +848,6 @@ def render_graph_figure(graph: PropertyGraph,
         except Exception:
             pos = nx.spring_layout(G, seed=42, k=max(0.6, 2.5 / np.sqrt(max(1, n_count))))
     elif layout_algorithm == "Shell":
-        # Group by first label
         label_groups = {}
         for nid, node in graph.nodes.items():
             primary_lbl = sorted(list(node.labels))[0] if node.labels else "Default"
@@ -675,7 +865,6 @@ def render_graph_figure(graph: PropertyGraph,
     mid_x = []
     mid_y = []
     mid_text = []
-    mid_hover = []
     mid_color = []
 
     for rid, rel in graph.relationships.items():
@@ -688,32 +877,22 @@ def render_graph_figure(graph: PropertyGraph,
         edge_x.extend([x0, x1, None])
         edge_y.extend([y0, y1, None])
 
-        # Directional point (at 60% distance for a slightly better look with large nodes)
+        # Directional point
         mx = x0 + 0.60 * (x1 - x0)
         my = y0 + 0.60 * (y1 - y0)
         mid_x.append(mx)
         mid_y.append(my)
 
         is_matched = rid in matched_rids_set
-        color = "#F59E0B" if is_matched else "#94A3B8"
+        color = "#F59E0B" if is_matched else "#64748B"
         mid_color.append(color)
-
         mid_text.append(f"<b>{rel.type}</b>")
-
-        prop_str = "".join([f"<tr><td><b>{k}</b>:</td><td>{v}</td></tr>" for k, v in rel.properties.items()])
-        hover_info = (
-            f"<b style='color:#334155; font-size:14px;'>Relationship: [{rel.type}]</b><br>"
-            f"<span style='color:#64748B;'>{rel.source} &rarr; {rel.target}</span><br>"
-        )
-        if prop_str:
-            hover_info += f"<hr><table style='font-size:12px;'>{prop_str}</table>"
-        mid_hover.append(hover_info)
 
     # Base Edge Lines
     fig.add_trace(go.Scatter(
         x=edge_x, y=edge_y,
         mode="lines",
-        line=dict(width=2, color="#CBD5E1"),
+        line=dict(width=2, color="#94A3B8"),
         hoverinfo="none",
         showlegend=False
     ))
@@ -723,12 +902,11 @@ def render_graph_figure(graph: PropertyGraph,
         fig.add_trace(go.Scatter(
             x=mid_x, y=mid_y,
             mode="text+markers",
-            marker=dict(size=10, symbol="triangle-up", color=mid_color, line=dict(width=1, color="white")),
+            marker=dict(size=10, symbol="triangle-up", color=mid_color, line=dict(width=1, color="#64748B")),
             text=mid_text,
             textposition="top center",
             textfont=dict(size=10, color="#475569", family="Arial, sans-serif"),
-            hoverinfo="text",
-            hovertext=mid_hover,
+            hoverinfo="none",
             showlegend=False
         ))
 
@@ -741,13 +919,12 @@ def render_graph_figure(graph: PropertyGraph,
     for label_name, nids in nodes_by_label.items():
         nx_coords = []
         ny_coords = []
-        hover_texts = []
         display_texts = []
         sizes = []
         line_widths = []
         line_colors = []
 
-        base_color = LABEL_COLORS.get(label_name, DEFAULT_NODE_COLOR)
+        base_color = get_node_color(label_name)
 
         for nid in nids:
             if nid not in pos:
@@ -759,7 +936,6 @@ def render_graph_figure(graph: PropertyGraph,
             node = graph.nodes[nid]
             is_matched = nid in matched_nids_set
 
-            # Sizing & Highlights for premium feel
             if is_matched:
                 sizes.append(45)
                 line_widths.append(4)
@@ -781,19 +957,6 @@ def render_graph_figure(graph: PropertyGraph,
             else:
                 display_texts.append("")
 
-            # Premium HTML Hover information
-            labels_str = ":" + ":".join(sorted(node.labels))
-            prop_lines = "".join([f"<tr><td style='padding-right:10px;'><b>{k}</b>:</td><td>{v}</td></tr>" for k, v in node.properties.items()])
-            
-            hover = (
-                f"<b style='color:#1E293B; font-size:15px;'>{node.display_name()}</b><br>"
-                f"<span style='color:#6366F1;'>{labels_str}</span><br>"
-                f"<span style='color:#94A3B8; font-size:11px;'>ID: {nid}</span>"
-            )
-            if prop_lines:
-                hover += f"<hr><table style='font-size:12px; color:#334155;'>{prop_lines}</table>"
-            hover_texts.append(hover)
-
         fig.add_trace(go.Scatter(
             x=nx_coords, y=ny_coords,
             mode="markers+text",
@@ -807,8 +970,7 @@ def render_graph_figure(graph: PropertyGraph,
             text=display_texts,
             textposition="bottom center",
             textfont=dict(size=12, color="#0F172A", family="Arial, sans-serif"),
-            hoverinfo="text",
-            hovertext=hover_texts
+            hoverinfo="none"
         ))
 
     # Matched highlight legend indicator if any
@@ -822,17 +984,17 @@ def render_graph_figure(graph: PropertyGraph,
             bordercolor="#FACC15",
             borderwidth=2,
             borderpad=6,
-            opacity=0.9
+            opacity=0.95
         )
 
     fig.update_layout(
-        title=dict(text="<b>Interactive Graph Topology</b>", font=dict(size=18, family="Arial, sans-serif", color="#1E293B")),
-        hovermode="closest",
+        title=dict(text="<b>Graph Topology</b>", font=dict(size=18, family="Arial, sans-serif", color="#0F172A")),
+        hovermode=False,
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         height=600,
         margin=dict(l=15, r=15, t=50, b=20),
-        plot_bgcolor="rgba(248,250,252,0.6)", # subtle slate-50 background
+        plot_bgcolor="rgba(248,250,252,0.6)",
         paper_bgcolor="rgba(0,0,0,0)",
         legend=dict(
             orientation="h",
@@ -840,21 +1002,14 @@ def render_graph_figure(graph: PropertyGraph,
             y=1.02,
             xanchor="right",
             x=1,
-            font=dict(size=11),
+            font=dict(size=11, color="#0F172A"),
             bgcolor="rgba(255,255,255,0.8)",
             bordercolor="#E2E8F0",
             borderwidth=1
-        ),
-        hoverlabel=dict(
-            bgcolor="white",
-            font_size=13,
-            font_family="Arial, sans-serif"
         )
     )
 
     return fig
-
-
 
 
 def render_interactive_graph_canvas(graph: PropertyGraph, 
@@ -870,7 +1025,7 @@ def render_interactive_graph_canvas(graph: PropertyGraph,
     
     for nid, node in graph.nodes.items():
         primary_label = sorted(list(node.labels))[0] if node.labels else "Entity"
-        base_color = LABEL_COLORS.get(primary_label, DEFAULT_NODE_COLOR)
+        base_color = get_node_color(primary_label)
         
         is_matched = nid in matched_nids
         border_width = 4 if is_matched else 2
@@ -1007,7 +1162,7 @@ def render_interactive_graph_canvas(graph: PropertyGraph,
                 <button class="ctrl-btn" onclick="network.fit({{animation: true}})" title="Fit to View">Fit view</button>
                 <button class="ctrl-btn" onclick="zoom(0.2)" title="Zoom In">Zoom in</button>
                 <button class="ctrl-btn" onclick="zoom(-0.2)" title="Zoom Out">Zoom out</button>
-                <button class="ctrl-btn" id="physics-btn" onclick="togglePhysics()" title="Toggle Physics">Freeze layout</button>
+                <button class="ctrl-btn" id="physics-btn" onclick="togglePhysics()" title="Toggle Physics">⚡ Freeze</button>
             </div>
         </div>
 
@@ -1094,6 +1249,7 @@ def render_interactive_graph_canvas(graph: PropertyGraph,
     """
     
     components.html(html_code, height=700)
+
 
 # ======================================================================================
 # 5. SECTION RENDERERS
@@ -1211,34 +1367,29 @@ def render_simulation_section():
     graph: PropertyGraph = st.session_state["graph"]
     engine: CypherEngine = st.session_state["cypher_engine"]
 
-    # Compact observation record keeps the graph, not dashboard tiles, as the focus.
+    preset_options = [
+        "University Academic Knowledge Graph (Default)",
+        "Social Network & Friendships",
+        "Financial Fraud Detection Ring",
+        "Blank / Empty Graph"
+    ]
+    current_preset_idx = st.session_state.get("preset_index", 0)
+    active_preset_name = st.session_state.get("active_preset", preset_options[current_preset_idx])
+    schema = PRESET_SCHEMAS.get(active_preset_name, PRESET_SCHEMAS["University Academic Knowledge Graph (Default)"])
     metrics = graph.get_metrics()
-    st.markdown(
-        f'<div class="manual-label">Current Graph Record</div>'
-        f'<p><strong>{metrics["num_nodes"]}</strong> nodes &nbsp;&nbsp; '
-        f'<strong>{metrics["num_relationships"]}</strong> relationships &nbsp;&nbsp; '
-        f'<strong>{metrics["num_labels"]}</strong> labels &nbsp;&nbsp; '
-        f'<strong>{metrics["density"]}</strong> density</p>',
-        unsafe_allow_html=True
-    )
 
-    st.write("")
-    
-    # Top Control Bar: Presets and Reset
+    # ----------------------------------------------------------------------------------
+    # TOP CONTROL BAR: Grouped Presets, Live Metrics & Reset
+    # ----------------------------------------------------------------------------------
     with st.container(border=True):
-        st.markdown('<div class="manual-label">Graph Controls</div>', unsafe_allow_html=True)
-        col_preset1, col_preset2, col_reset = st.columns([2.5, 1.5, 1.2])
+        col_preset1, col_preset2, col_metrics, col_reset = st.columns([2.2, 1.2, 2.2, 1.0])
 
         with col_preset1:
             preset_choice = st.selectbox(
                 "Load Domain Graph Preset:",
-                options=[
-                    "University Academic Knowledge Graph (Default)",
-                    "Social Network & Friendships",
-                    "Financial Fraud Detection Ring",
-                    "Blank / Empty Graph"
-                ],
-                index=st.session_state.get("preset_index", 0)
+                options=preset_options,
+                index=current_preset_idx,
+                key="simulation_preset_select"
             )
 
         with col_preset2:
@@ -1258,11 +1409,29 @@ def render_simulation_section():
                     graph.clear()
                     st.session_state["preset_index"] = 3
 
+                st.session_state["active_preset"] = preset_choice
                 st.session_state["matched_node_ids"] = []
                 st.session_state["matched_rel_ids"] = []
                 st.session_state["last_cypher_result"] = None
+                # Reset widget keys so new preset defaults apply
+                for k in ["node_label_sel", "custom_label_inp", "node_id_inp", "node_name_inp", 
+                          "prop_key1_inp", "prop_val1_inp", "prop_key2_inp", "prop_val2_inp",
+                          "rel_type_sel", "custom_rel_inp", "rel_prop_k_inp", "rel_prop_v_inp"]:
+                    st.session_state.pop(k, None)
                 st.toast(f"Loaded '{preset_choice}' successfully!")
                 st.rerun()
+
+        with col_metrics:
+            st.markdown('<div class="manual-label" style="margin-bottom:6px;">Current Graph Record</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="metric-chips-row">'
+                f'<span class="metric-chip"><strong>{metrics["num_nodes"]}</strong> nodes</span>'
+                f'<span class="metric-chip"><strong>{metrics["num_relationships"]}</strong> relationships</span>'
+                f'<span class="metric-chip"><strong>{metrics["num_labels"]}</strong> labels</span>'
+                f'<span class="metric-chip"><strong>{metrics["density"]}</strong> density</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
         with col_reset:
             st.write("")
@@ -1272,101 +1441,65 @@ def render_simulation_section():
                 st.session_state["matched_node_ids"] = []
                 st.session_state["matched_rel_ids"] = []
                 st.session_state["last_cypher_result"] = None
-                st.toast("Graph has been cleared to empty state.")
+                st.toast("Graph cleared.")
                 st.rerun()
 
-    st.divider()
+    # ----------------------------------------------------------------------------------
+    # CENTERPIECE: VISUAL GRAPH CANVAS (Main Focus of Virtual Lab)
+    # ----------------------------------------------------------------------------------
+    st.write("")
+    with st.container(border=True):
+        top_col1, top_col2, top_col3 = st.columns([2.8, 2.4, 1.2])
+        with top_col1:
+            st.subheader("Topology and Relationships")
+        with top_col2:
+            st.write("")
+            view_mode = st.radio(
+                "Graph Rendering Engine:",
+                ["Interactive Neo4j Canvas (Recommended)", "Static Plotly Layout"],
+                horizontal=True,
+                label_visibility="collapsed"
+            )
+        with top_col3:
+            st.write("")
+            if st.button("Clear Highlighting", use_container_width=True):
+                st.session_state["matched_node_ids"] = []
+                st.session_state["matched_rel_ids"] = []
+                st.rerun()
 
-    # Main Interactive Tabs: UI Builder vs Cypher Editor
-    tab_cypher, tab_builder = st.tabs([
+        if view_mode == "Interactive Neo4j Canvas (Recommended)":
+            render_interactive_graph_canvas(
+                graph=graph,
+                matched_node_ids=st.session_state.get("matched_node_ids"),
+                matched_rel_ids=st.session_state.get("matched_rel_ids")
+            )
+        else:
+            pc1, pc2 = st.columns(2)
+            with pc1:
+                layout_opt = st.selectbox("Plotly Layout:", ["Spring (Force-Directed)", "Kamada-Kawai", "Circular", "Shell"], index=0)
+            with pc2:
+                label_opt = st.selectbox("Node Display:", ["Name / Label", "Name Only", "Node ID", "Label Only"], index=0)
+            fig = render_graph_figure(
+                graph=graph,
+                matched_node_ids=st.session_state.get("matched_node_ids"),
+                matched_rel_ids=st.session_state.get("matched_rel_ids"),
+                layout_algorithm=layout_opt,
+                node_label_mode=label_opt
+            )
+            st.plotly_chart(fig, use_container_width=True, theme="streamlit")
+
+    # ----------------------------------------------------------------------------------
+    # WORKSTATION INTERACTIVE CONTROLS (Grouped cleanly in tabs)
+    # ----------------------------------------------------------------------------------
+    st.write("")
+    tab_builder, tab_cypher, tab_logger = st.tabs([
+        "Visual Graph Builder (UI Controls)",
         "Cypher Query Editor & Console",
-        "Visual Graph Builder (UI Controls)"
+        "Observation Sheet"
     ])
 
     # ----------------------------------------------------------------------------------
-    # TAB 1: CYPHER QUERY CONSOLE
-    # ----------------------------------------------------------------------------------
-    with tab_cypher:
-        with st.container(border=True):
-            st.markdown('<div class="manual-label">Cypher Query</div>', unsafe_allow_html=True)
-            st.caption("Execute declarative Cypher queries against the in-memory graph. Supported: MATCH, CREATE, SET, DELETE, DETACH DELETE, WHERE, aggregations.")
-
-        cypher_examples = {
-            "-- Select an Educational Cypher Example --": "",
-            "1. Match all nodes and inspect entire graph": "MATCH (n) RETURN n",
-            "2. Match enrolled students and their courses": "MATCH (s:Student)-[:ENROLLED_IN]->(c:Course) RETURN s.name, c.name, s.gpa",
-            "3. Filter high-performing students (WHERE clause)": "MATCH (s:Student) WHERE s.gpa >= 3.5 RETURN s.name, s.dept, s.gpa",
-            "4. Multi-hop traversal: Faculty teaching enrolled students": "MATCH (f:Faculty)-[:TEACHES]->(c:Course)<-[:ENROLLED_IN]-(s:Student) RETURN f.name, c.name, s.name",
-            "5. Aggregate enrollment counts per course (count)": "MATCH (c:Course)<-[:ENROLLED_IN]-(s:Student) RETURN c.name, count(s) AS total_enrolled",
-            "6. Prerequisite chain traversal (Course -> Course)": "MATCH (c1:Course)-[:PREREQUISITE_OF]->(c2:Course) RETURN c1.name, c2.name",
-            "7. CREATE a new Student node": "CREATE (s:Student {id: 's_kiran', name: 'Kiran Patel', dept: 'CSE', gpa: 3.78}) RETURN s",
-            "8. Connect new Student to Course (CREATE relationship)": "MATCH (s:Student {id: 's_kiran'}), (c:Course {name: 'Database Management Systems'}) CREATE (s)-[:ENROLLED_IN {grade: 'A', semester: '5th'}]->(c) RETURN s, c",
-            "9. Update student GPA using SET": "MATCH (s:Student {id: 's_kiran'}) SET s.gpa = 3.92 RETURN s",
-            "10. Safely remove student using DETACH DELETE": "MATCH (s:Student {id: 's_kiran'}) DETACH DELETE s"
-        }
-
-        col_ex, col_load = st.columns([3.5, 1.2])
-        with col_ex:
-            selected_example = st.selectbox(
-                "Predefined Cypher Examples:",
-                options=list(cypher_examples.keys()),
-                index=0
-            )
-
-        with col_load:
-            st.write("")
-            st.write("")
-            if st.button("Load Query", use_container_width=True):
-                if cypher_examples[selected_example]:
-                    st.session_state["current_query_input"] = cypher_examples[selected_example]
-                    st.rerun()
-
-        query_input = st.text_area(
-            "Enter Cypher Statement:",
-            value=st.session_state.get("current_query_input", "MATCH (s:Student)-[:ENROLLED_IN]->(c:Course) RETURN s.name, c.name, s.gpa"),
-            height=100,
-            help="Type Cypher query. Examples: MATCH (n) RETURN n | CREATE (n:Student {name: 'Alice'})"
-        )
-        st.session_state["current_query_input"] = query_input
-
-        col_run, col_log_query = st.columns([1.5, 3.5])
-        with col_run:
-            run_clicked = st.button("Execute Cypher Query", type="primary", use_container_width=True)
-
-        if run_clicked:
-            res = engine.execute(query_input)
-            st.session_state["last_cypher_result"] = res
-            st.session_state["matched_node_ids"] = res["matched_node_ids"]
-            st.session_state["matched_rel_ids"] = res["matched_rel_ids"]
-
-            # Automatically log to trial book if requested
-            trial_record = {
-                "Trial #": len(st.session_state["trials"]) + 1,
-                "Operation": "Cypher Query",
-                "Query / Action": query_input[:65],
-                "Result": res["message"][:40],
-                "Status": "Success" if res["success"] else "Failed",
-                "Timestamp": datetime.now().strftime("%H:%M:%S")
-            }
-            st.session_state["trials"].append(trial_record)
-
-        # Render Query Execution Results
-        last_res = st.session_state.get("last_cypher_result")
-        if last_res:
-            st.divider()
-            if last_res["success"]:
-                st.success(f"**Query Succeeded** ({last_res['execution_time_ms']} ms): {last_res['message']}")
-                df = last_res["dataframe"]
-                if not df.empty:
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-                else:
-                    st.caption("No tabular records returned by this statement.")
-            else:
-                st.error(f"**Query Failed** ({last_res['execution_time_ms']} ms): {last_res['message']}")
-                st.info("Tip: Ensure your labels, relationship types, and node variables are formatted correctly.")
-
-    # ----------------------------------------------------------------------------------
-    # TAB 2: VISUAL GRAPH BUILDER (UI CONTROLS)
+    # TAB 1: VISUAL GRAPH BUILDER (UI CONTROLS - CRUD FOR ALL USE CASES)
     # ----------------------------------------------------------------------------------
     with tab_builder:
         st.subheader("Visual Graph Builder")
@@ -1379,25 +1512,44 @@ def render_simulation_section():
             "Delete Entity"
         ])
 
-        # SUB-TAB A: ADD NODE
+        # SUB-TAB A: ADD NODE (CREATE)
         with sub_tab_node:
             col_lbl, col_id, col_name = st.columns(3)
             with col_lbl:
-                node_label = st.selectbox("Entity Label (Type):", ["Student", "Course", "Faculty", "Department", "Project", "Custom..."])
+                label_options = schema["node_labels"]
+                def_lbl_idx = 0
+                if "node_label_sel" in st.session_state and st.session_state["node_label_sel"] in label_options:
+                    def_lbl_idx = label_options.index(st.session_state["node_label_sel"])
+                node_label = st.selectbox("Entity Label (Type):", label_options, index=def_lbl_idx, key="node_label_sel")
                 if node_label == "Custom...":
-                    node_label = st.text_input("Custom Label Name:", value="Topic")
+                    custom_lbl_val = st.session_state.get("custom_label_inp", "Topic")
+                    custom_node_label = st.text_input("Custom Label Name:", value=custom_lbl_val, key="custom_label_inp")
+                    active_label_for_node = custom_node_label.strip() if custom_node_label.strip() else "Entity"
+                else:
+                    active_label_for_node = node_label
+
+            lbl_defaults = schema.get("default_properties", {}).get(node_label, {
+                "id_prefix": "node_", "name": "New Entity", "key1": "code", "val1": "E101", "key2": "status", "val2": "Active"
+            })
+
             with col_id:
-                node_id_input = st.text_input("Node ID / Key:", value=f"node_{len(graph.nodes) + 1}", help="Unique identifier for the node")
+                def_id_val = st.session_state.get("node_id_inp", f"{lbl_defaults.get('id_prefix', 'node_')}{len(graph.nodes) + 1}")
+                node_id_input = st.text_input("Node ID / Key:", value=def_id_val, key="node_id_inp", help="Unique identifier for the node")
             with col_name:
-                node_name_input = st.text_input("Display Name:", value="New Entity")
+                def_name_val = st.session_state.get("node_name_inp", lbl_defaults.get("name", "New Entity"))
+                node_name_input = st.text_input("Display Name:", value=def_name_val, key="node_name_inp")
 
             col_p1, col_p2, col_p3 = st.columns(3)
             with col_p1:
-                prop_key1 = st.text_input("Property 1 Key:", value="dept" if node_label in ["Student", "Faculty"] else "code")
-                prop_val1 = st.text_input("Property 1 Value:", value="CSE" if node_label in ["Student", "Faculty"] else "CS401")
+                def_k1_val = st.session_state.get("prop_key1_inp", lbl_defaults.get("key1", "code"))
+                def_v1_val = st.session_state.get("prop_val1_inp", lbl_defaults.get("val1", "VAL1"))
+                prop_key1 = st.text_input("Property 1 Key:", value=def_k1_val, key="prop_key1_inp")
+                prop_val1 = st.text_input("Property 1 Value:", value=def_v1_val, key="prop_val1_inp")
             with col_p2:
-                prop_key2 = st.text_input("Property 2 Key:", value="gpa" if node_label == "Student" else "credits")
-                prop_val2 = st.text_input("Property 2 Value:", value="3.75" if node_label == "Student" else "4")
+                def_k2_val = st.session_state.get("prop_key2_inp", lbl_defaults.get("key2", "status"))
+                def_v2_val = st.session_state.get("prop_val2_inp", lbl_defaults.get("val2", "Active"))
+                prop_key2 = st.text_input("Property 2 Key:", value=def_k2_val, key="prop_key2_inp")
+                prop_val2 = st.text_input("Property 2 Value:", value=def_v2_val, key="prop_val2_inp")
             with col_p3:
                 st.write("")
                 st.write("")
@@ -1405,7 +1557,6 @@ def render_simulation_section():
                     try:
                         props = {"name": node_name_input}
                         if prop_key1 and prop_val1:
-                            # Auto-cast
                             try:
                                 props[prop_key1] = float(prop_val1) if "." in prop_val1 else int(prop_val1)
                             except ValueError:
@@ -1416,14 +1567,14 @@ def render_simulation_section():
                             except ValueError:
                                 props[prop_key2] = prop_val2
 
-                        graph.add_node(node_id_input, [node_label], props)
+                        graph.add_node(node_id_input, [active_label_for_node], props)
                         st.session_state["matched_node_ids"] = [node_id_input]
 
                         # Log trial
                         st.session_state["trials"].append({
                             "Trial #": len(st.session_state["trials"]) + 1,
                             "Operation": "CREATE Node",
-                            "Query / Action": f"CREATE (:{node_label} {{id: '{node_id_input}', name: '{node_name_input}'}})",
+                            "Query / Action": f"CREATE (:{active_label_for_node} {{id: '{node_id_input}', name: '{node_name_input}'}})",
                             "Result": f"Node '{node_id_input}' added",
                             "Status": "Success",
                             "Timestamp": datetime.now().strftime("%H:%M:%S")
@@ -1433,7 +1584,7 @@ def render_simulation_section():
                     except Exception as ex:
                         st.error(f"Error creating node: {str(ex)}")
 
-        # SUB-TAB B: ADD RELATIONSHIP
+        # SUB-TAB B: ADD RELATIONSHIP (CREATE)
         with sub_tab_rel:
             node_options = [f"{nid} ({':'.join(n.labels)}: {n.display_name()})" for nid, n in graph.nodes.items()]
             if len(node_options) < 2:
@@ -1444,19 +1595,30 @@ def render_simulation_section():
                     src_choice = st.selectbox("Source Node (From):", options=node_options, index=0)
                     src_id = src_choice.split(" ")[0]
                 with col_rel:
-                    rel_type = st.selectbox("Relationship Type:", ["ENROLLED_IN", "TEACHES", "PREREQUISITE_OF", "BELONGS_TO", "ADVISES", "OFFERED_BY", "Custom..."])
+                    rel_options = schema["rel_types"]
+                    def_rel_idx = 0
+                    if "rel_type_sel" in st.session_state and st.session_state["rel_type_sel"] in rel_options:
+                        def_rel_idx = rel_options.index(st.session_state["rel_type_sel"])
+                    rel_type = st.selectbox("Relationship Type:", rel_options, index=def_rel_idx, key="rel_type_sel")
                     if rel_type == "Custom...":
-                        rel_type = st.text_input("Custom Relationship Type:", value="CONNECTED_TO").upper()
+                        custom_rel_val = st.session_state.get("custom_rel_inp", "CONNECTED_TO")
+                        custom_rel_input = st.text_input("Custom Relationship Type:", value=custom_rel_val, key="custom_rel_inp")
+                        active_rel_type = custom_rel_input.strip().upper() if custom_rel_input.strip() else "CONNECTED_TO"
+                    else:
+                        active_rel_type = rel_type
+
                 with col_tgt:
-                    # Select target node
-                    tgt_choice = st.selectbox("Target Node (To):", options=node_options, index=min(1, len(node_options)-1))
+                    tgt_choice = st.selectbox("Target Node (To):", options=node_options, index=min(1, len(node_options) - 1))
                     tgt_id = tgt_choice.split(" ")[0]
 
+                rel_defaults = schema.get("default_rel_properties", {}).get(rel_type, {"key": "weight", "val": "1.0"})
                 col_rp1, col_rp2, col_rp3 = st.columns(3)
                 with col_rp1:
-                    r_prop_k = st.text_input("Rel Property Key:", value="semester")
+                    def_rk = st.session_state.get("rel_prop_k_inp", rel_defaults.get("key", "weight"))
+                    r_prop_k = st.text_input("Rel Property Key:", value=def_rk, key="rel_prop_k_inp")
                 with col_rp2:
-                    r_prop_v = st.text_input("Rel Property Value:", value="Autumn 2024")
+                    def_rv = st.session_state.get("rel_prop_v_inp", rel_defaults.get("val", "1.0"))
+                    r_prop_v = st.text_input("Rel Property Value:", value=def_rv, key="rel_prop_v_inp")
                 with col_rp3:
                     st.write("")
                     st.write("")
@@ -1464,8 +1626,11 @@ def render_simulation_section():
                         try:
                             r_props = {}
                             if r_prop_k and r_prop_v:
-                                r_props[r_prop_k] = r_prop_v
-                            r = graph.add_relationship(src_id, tgt_id, rel_type, r_props)
+                                try:
+                                    r_props[r_prop_k] = float(r_prop_v) if "." in r_prop_v else int(r_prop_v)
+                                except ValueError:
+                                    r_props[r_prop_k] = r_prop_v
+                            r = graph.add_relationship(src_id, tgt_id, active_rel_type, r_props)
                             st.session_state["matched_node_ids"] = [src_id, tgt_id]
                             st.session_state["matched_rel_ids"] = [r.id]
 
@@ -1473,12 +1638,12 @@ def render_simulation_section():
                             st.session_state["trials"].append({
                                 "Trial #": len(st.session_state["trials"]) + 1,
                                 "Operation": "CREATE Rel",
-                                "Query / Action": f"CREATE ({src_id})-[:{rel_type}]->({tgt_id})",
+                                "Query / Action": f"CREATE ({src_id})-[:{active_rel_type}]->({tgt_id})",
                                 "Result": f"Rel '{r.id}' added",
                                 "Status": "Success",
                                 "Timestamp": datetime.now().strftime("%H:%M:%S")
                             })
-                            st.toast(f"Relationship '{rel_type}' created!")
+                            st.toast(f"Relationship '{active_rel_type}' created!")
                             st.rerun()
                         except Exception as ex:
                             st.error(f"Error creating relationship: {str(ex)}")
@@ -1488,20 +1653,33 @@ def render_simulation_section():
             if not graph.nodes:
                 st.info("No nodes available to update.")
             else:
-                col_u1, col_u2, col_u3, col_u4 = st.columns([2, 1.5, 1.5, 1.2])
+                col_u1, col_u2, col_u3, col_u4 = st.columns([2.2, 1.6, 1.6, 1.2])
                 with col_u1:
                     u_node_choice = st.selectbox("Select Target Node:", options=node_options, key="update_node_sel")
                     u_nid = u_node_choice.split(" ")[0]
+                    selected_node = graph.nodes.get(u_nid)
+                    if selected_node and selected_node.properties:
+                        props_preview = " · ".join([f"**{k}**: {v}" for k, v in selected_node.properties.items()])
+                        st.caption(f"Current properties: {props_preview}")
+
                 with col_u2:
-                    set_k = st.text_input("Property Key to Update:", value="gpa")
+                    existing_keys = [k for k in selected_node.properties.keys() if k != "name"] if selected_node else []
+                    prop_key_options = existing_keys + ["name", "Custom Key..."]
+                    prop_choice = st.selectbox("Property Key to Update:", options=prop_key_options, key=f"prop_key_choice_{u_nid}")
+                    if prop_choice == "Custom Key...":
+                        set_k = st.text_input("Enter Property Name:", value="status", key=f"custom_set_key_{u_nid}")
+                    else:
+                        set_k = prop_choice
+
                 with col_u3:
-                    set_v = st.text_input("New Property Value:", value="3.95")
+                    current_val = str(selected_node.properties.get(set_k, "")) if selected_node else ""
+                    set_v = st.text_input("New Property Value:", value=current_val, key=f"set_val_{u_nid}_{set_k}")
+
                 with col_u4:
                     st.write("")
                     st.write("")
                     if st.button("SET Property", type="primary", use_container_width=True):
                         try:
-                            # Auto-cast
                             try:
                                 v_parsed = float(set_v) if "." in set_v else int(set_v)
                             except ValueError:
@@ -1566,87 +1744,116 @@ def render_simulation_section():
                     else:
                         st.error(msg)
 
-    st.divider()
-
     # ----------------------------------------------------------------------------------
-    # GRAPH VISUALIZATION & VIEW CONTROLS
+    # TAB 2: CYPHER QUERY CONSOLE
     # ----------------------------------------------------------------------------------
-    st.markdown('<div class="manual-label">Interactive Graph</div>', unsafe_allow_html=True)
-    st.subheader("Topology and Relationships")
-    
-    view_col, _, highlight_col = st.columns([3, 2, 1.5])
-    with view_col:
-        view_mode = st.radio("Graph Rendering Engine:", ["Interactive Neo4j Canvas (Recommended)", "Static Plotly Layout"], horizontal=True, label_visibility="collapsed")
-    with highlight_col:
-        if st.button("Clear Highlighting", use_container_width=True):
-            st.session_state["matched_node_ids"] = []
-            st.session_state["matched_rel_ids"] = []
-            st.rerun()
+    with tab_cypher:
+        st.subheader("Cypher Query Editor & Console")
+        st.caption("Execute declarative Cypher queries against the in-memory graph. Supported: MATCH, CREATE, SET, DELETE, DETACH DELETE, WHERE, aggregations.")
 
-    if view_mode == "Interactive Neo4j Canvas (Recommended)":
-        render_interactive_graph_canvas(
-            graph=graph,
-            matched_node_ids=st.session_state.get("matched_node_ids"),
-            matched_rel_ids=st.session_state.get("matched_rel_ids")
+        cypher_examples = schema["cypher_examples"]
+        col_ex, col_load = st.columns([3.5, 1.2])
+        with col_ex:
+            selected_example = st.selectbox(
+                "Predefined Cypher Examples:",
+                options=list(cypher_examples.keys()),
+                index=0,
+                key=f"cypher_ex_sel_{active_preset_name}"
+            )
+
+        with col_load:
+            st.write("")
+            st.write("")
+            if st.button("Load Query", use_container_width=True):
+                if cypher_examples.get(selected_example):
+                    st.session_state["current_query_input"] = cypher_examples[selected_example]
+                    st.rerun()
+
+        default_cypher = list(cypher_examples.values())[1] if len(cypher_examples) > 1 else "MATCH (n) RETURN n"
+        query_input = st.text_area(
+            "Enter Cypher Statement:",
+            value=st.session_state.get("current_query_input", default_cypher),
+            height=90,
+            help="Type Cypher query. Examples: MATCH (n) RETURN n | CREATE (n:Student {name: 'Alice'})"
         )
-    else:
-        # Fallback to Plotly with options
-        pc1, pc2 = st.columns(2)
-        with pc1:
-            layout_opt = st.selectbox("Plotly Layout:", ["Spring (Force-Directed)", "Kamada-Kawai", "Circular", "Shell"], index=0)
-        with pc2:
-            label_opt = st.selectbox("Node Display:", ["Name / Label", "Name Only", "Node ID", "Label Only"], index=0)
-        fig = render_graph_figure(
-            graph=graph,
-            matched_node_ids=st.session_state.get("matched_node_ids"),
-            matched_rel_ids=st.session_state.get("matched_rel_ids"),
-            layout_algorithm=layout_opt,
-            node_label_mode=label_opt
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.session_state["current_query_input"] = query_input
 
-    # ----------------------------------------------------------------------------------
-    # EXPERIMENTAL DATA LOGGER
-    # ----------------------------------------------------------------------------------
-    st.divider()
-    st.markdown('<div class="manual-label">Experimental Data Log</div>', unsafe_allow_html=True)
-    st.subheader("Observation Sheet")
-    st.caption("Record parameters, queries, and graph behavior across trials for inclusion in your official lab report.")
+        col_run, _ = st.columns([1.5, 3.5])
+        with col_run:
+            run_clicked = st.button("Execute Cypher Query", type="primary", use_container_width=True)
 
-    col_log1, col_log2 = st.columns([1.8, 3.2])
+        if run_clicked:
+            res = engine.execute(query_input)
+            st.session_state["last_cypher_result"] = res
+            st.session_state["matched_node_ids"] = res["matched_node_ids"]
+            st.session_state["matched_rel_ids"] = res["matched_rel_ids"]
 
-    with col_log1:
-        st.caption("Capture current graph metrics and last operation into your session log table:")
-        if st.button("Record Current State as Trial", type="primary", use_container_width=True):
             trial_record = {
                 "Trial #": len(st.session_state["trials"]) + 1,
-                "Operation": "Graph Snapshot",
-                "Query / Action": f"Nodes: {metrics['num_nodes']}, Rels: {metrics['num_relationships']}",
-                "Result": f"Density: {metrics['density']}, AvgDeg: {metrics['avg_degree']}",
-                "Status": "Recorded",
+                "Operation": "Cypher Query",
+                "Query / Action": query_input[:65],
+                "Result": res["message"][:40],
+                "Status": "Success" if res["success"] else "Failed",
                 "Timestamp": datetime.now().strftime("%H:%M:%S")
             }
             st.session_state["trials"].append(trial_record)
-            st.toast(f"Trial #{trial_record['Trial #']} successfully logged!")
 
-        if st.button("Clear Logged Trials", use_container_width=True):
-            st.session_state["trials"] = []
-            st.toast("Trial log cleared.")
+        # Render Query Execution Results
+        last_res = st.session_state.get("last_cypher_result")
+        if last_res:
+            st.divider()
+            if last_res["success"]:
+                st.success(f"**Query Succeeded** ({last_res['execution_time_ms']} ms): {last_res['message']}")
+                df = last_res["dataframe"]
+                if not df.empty:
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                else:
+                    st.caption("No tabular records returned by this statement.")
+            else:
+                st.error(f"**Query Failed** ({last_res['execution_time_ms']} ms): {last_res['message']}")
+                st.info("Tip: Ensure your labels, relationship types, and node variables are formatted correctly.")
 
-    with col_log2:
-        if st.session_state["trials"]:
-            df_trials = pd.DataFrame(st.session_state["trials"])
-            st.dataframe(df_trials, use_container_width=True, hide_index=True)
-            csv_data = df_trials.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "Download Trials as CSV",
-                data=csv_data,
-                file_name="graph_db_trials.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        else:
-            st.info("No trials recorded yet. Perform graph operations or click 'Record Current State as Trial' to begin.")
+    # ----------------------------------------------------------------------------------
+    # TAB 3: EXPERIMENTAL DATA LOGGER (OBSERVATION SHEET)
+    # ----------------------------------------------------------------------------------
+    with tab_logger:
+        st.subheader("Observation Sheet")
+        st.caption("Record parameters, queries, and graph behavior across trials for inclusion in your official lab report.")
+
+        col_log1, col_log2 = st.columns([1.8, 3.2])
+
+        with col_log1:
+            st.caption("Capture current graph metrics and last operation into your session log table:")
+            if st.button("Record Current State as Trial", type="primary", use_container_width=True):
+                trial_record = {
+                    "Trial #": len(st.session_state["trials"]) + 1,
+                    "Operation": "Graph Snapshot",
+                    "Query / Action": f"Nodes: {metrics['num_nodes']}, Rels: {metrics['num_relationships']}",
+                    "Result": f"Density: {metrics['density']}, AvgDeg: {metrics['avg_degree']}",
+                    "Status": "Recorded",
+                    "Timestamp": datetime.now().strftime("%H:%M:%S")
+                }
+                st.session_state["trials"].append(trial_record)
+                st.toast(f"Trial #{trial_record['Trial #']} successfully logged!")
+
+            if st.button("Clear Logged Trials", use_container_width=True):
+                st.session_state["trials"] = []
+                st.toast("Trial log cleared.")
+
+        with col_log2:
+            if st.session_state["trials"]:
+                df_trials = pd.DataFrame(st.session_state["trials"])
+                st.dataframe(df_trials, use_container_width=True, hide_index=True)
+                csv_data = df_trials.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    "Download Trials as CSV",
+                    data=csv_data,
+                    file_name="graph_db_trials.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            else:
+                st.info("No trials recorded yet. Perform graph operations or click 'Record Current State as Trial' to begin.")
 
 
 def render_quiz_section():
@@ -1850,6 +2057,153 @@ def init_session_state():
         st.session_state["student_notes"] = ""
     if "preset_index" not in st.session_state:
         st.session_state["preset_index"] = 0
+    if "active_preset" not in st.session_state:
+        st.session_state["active_preset"] = "University Academic Knowledge Graph (Default)"
+
+
+def get_app_styles() -> str:
+    """Generates clean, theme-adaptive CSS that renders seamlessly in both Light and Dark modes."""
+    return """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+    :root {
+        --accent: #0284c7;
+        --accent-soft: rgba(2, 132, 199, 0.10);
+        --accent-hover: #0369a1;
+        --violet: #6366f1;
+        --warm: #ea580c;
+        --card-bg: rgba(127, 127, 127, 0.05);
+        --card-border: rgba(127, 127, 127, 0.18);
+        --card-subtle: rgba(127, 127, 127, 0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --accent: #22d3c7;
+            --accent-soft: rgba(34, 211, 199, 0.12);
+            --accent-hover: #14b8a6;
+            --violet: #7c6cf6;
+            --warm: #f0a36a;
+            --card-bg: rgba(255, 255, 255, 0.04);
+            --card-border: rgba(255, 255, 255, 0.12);
+            --card-subtle: rgba(255, 255, 255, 0.07);
+        }
+    }
+
+    /* Container & Layout */
+    .main .block-container {
+        max-width: 1440px;
+        padding: 2.2rem 3.5rem 4.5rem;
+    }
+    h1, h2, h3, h4 {
+        font-family: 'Space Grotesk', sans-serif !important;
+        letter-spacing: -0.01em !important;
+    }
+    
+    h1 { font-size: 2.15rem !important; line-height: 1.15 !important; }
+    h2 { font-size: 1.55rem !important; margin-top: 1.8rem !important; }
+    h3 { font-size: 1.15rem !important; }
+
+    /* Virtual Lab Header */
+    .vlab-header {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-top: 3px solid var(--accent);
+        border-radius: 14px;
+        padding: 1.8rem 2.2rem 1.6rem;
+        margin-bottom: 2.2rem;
+    }
+    .vlab-header h1 {
+        margin: 0;
+        font-size: 2rem !important;
+        font-weight: 700 !important;
+    }
+    .hero-eyebrow { color: var(--accent); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+    .experiment-cover .hero-eyebrow { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+    .hero-dot { display: inline-block; width: 7px; height: 7px; margin-right: 0.55rem; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
+    .hero-title-row { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin-top: 0.75rem; }
+    .hero-title-row h1 { margin: 0 !important; }
+    .hero-badge { background: linear-gradient(135deg, var(--accent), var(--violet)); color: #FFFFFF; padding: 0.32rem 0.7rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; white-space: nowrap; }
+    .vlab-header p.subtitle { opacity: 0.8; font-size: 0.96rem; margin: 0.65rem 0 0; }
+    .vlab-header span.badge { background: var(--accent-soft); color: var(--accent); padding: 0.25rem 0.55rem; border-radius: 4px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; white-space: nowrap; margin-left: 0.75rem; vertical-align: middle; }
+
+    .manual-kicker, .manual-label {
+        color: var(--accent) !important;
+        font-size: 0.72rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.13em !important;
+        text-transform: uppercase;
+    }
+    .manual-intro {
+        border-left: 3px solid var(--accent);
+        padding: 0.55rem 1rem;
+        margin: 1.1rem 0 1.8rem;
+        background: var(--accent-soft);
+        border-radius: 0 8px 8px 0;
+    }
+    .experiment-cover {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+        gap: 2rem;
+        align-items: center;
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-top: 3px solid var(--accent);
+        border-radius: 14px;
+        padding: 2.2rem 2.5rem;
+        margin: 1.6rem 0 1.8rem;
+    }
+    .experiment-cover h2 { font-size: clamp(2rem, 4vw, 3.2rem) !important; line-height: 1.05 !important; margin: 0.7rem 0 1rem !important; }
+    .cover-copy p { max-width: 34rem; opacity: 0.82; font-size: 1.02rem; line-height: 1.65; }
+    .cover-meta { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; opacity: 0.75; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    .cover-meta span { border-left: 2px solid var(--accent); padding-left: 0.55rem; }
+    .cover-visual { min-height: 250px; display: grid; place-items: center; background: var(--card-subtle); border: 1px solid var(--card-border); border-radius: 12px; }
+    .cover-visual svg { width: 100%; max-width: 430px; height: auto; }
+    .graph-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 5; }
+    .graph-line.faint { stroke: #93C5FD; }
+    .graph-node { stroke-width: 4; }
+    .graph-node.node-teal { fill: #0284C7; }
+    .graph-node.node-warm { fill: #EA580C; }
+    .cover-visual text { opacity: 0.75; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.04em; }
+
+    .concept-diagram { display: flex; align-items: center; justify-content: center; gap: 1.2rem; padding: 1.4rem 1rem; margin: 0.5rem 0 2rem; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 10px; }
+    .concept-diagram > div { display: grid; gap: 0.35rem; justify-items: center; }
+    .concept-diagram small { opacity: 0.75; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    .diagram-node { display: inline-flex; align-items: center; justify-content: center; width: 4.8rem; height: 2.8rem; border: 2px solid currentColor; background: var(--card-subtle); border-radius: 4px; font: 600 0.72rem 'IBM Plex Mono', monospace; }
+    .diagram-node.accent { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+    .diagram-node.warm { border-color: var(--warm); color: var(--warm); background: rgba(234, 88, 12, 0.08); }
+    .diagram-arrow { color: var(--accent); font-size: 1.5rem; }
+    .diagram-arrow small { display: block; font-size: 0.6rem; text-align: center; opacity: 0.75; }
+
+    .report-facts { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--card-border); border-radius: 10px; background: var(--card-bg); margin: 1.2rem 0 1.6rem; }
+    .report-fact { padding: 0.85rem 1rem; border-right: 1px solid var(--card-border); }
+    .report-fact:last-child { border-right: 0; }
+    .report-fact small { display: block; opacity: 0.75; font-size: 0.67rem; letter-spacing: 0.1em; text-transform: uppercase; }
+    .report-fact strong { display: block; margin-top: 0.35rem; color: var(--accent); font-size: 1.05rem; overflow-wrap: anywhere; }
+
+    .quiz-progress { height: 5px; background: var(--card-border); border-radius: 3px; overflow: hidden; margin: 1.2rem 0 2rem; }
+    .quiz-progress span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--violet)); }
+
+    /* Simulation metric chips */
+    .metric-chips-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+    .metric-chip { background: var(--card-subtle); border: 1px solid var(--card-border); border-radius: 6px; padding: 4px 9px; font-size: 0.8rem; }
+    .metric-chip strong { color: var(--accent); font-weight: 700; }
+
+    /* Sidebar */
+    .sidebar-brand { color: var(--accent); font-size: 1.1rem; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 0.65rem; }
+    .sidebar-code { opacity: 0.75; font-size: 0.72rem; line-height: 1.55; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 1.5rem; }
+    .sidebar-stat { border: 1px solid var(--card-border); border-radius: 9px; background: var(--card-subtle); padding: 0.65rem 0.75rem; margin: 0.5rem 0; }
+    .sidebar-stat-label { display: block; opacity: 0.75; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+    .sidebar-stat-value { display: block; color: var(--accent); font-size: 0.9rem; font-weight: 700; margin-top: 0.2rem; }
+
+    /* Tabs & Code Areas */
+    [data-testid="stTabs"] [role="tablist"] { gap: 0.5rem; border-bottom: 1px solid var(--card-border); }
+    [data-testid="stTabs"] button[role="tab"] { border-radius: 8px 8px 0 0; padding: 0.65rem 0.8rem; }
+    [data-testid="stTabs"] button[role="tab"][aria-selected="true"] { color: var(--accent); font-weight: 600; }
+    [data-testid="stTextArea"] textarea { font-family: 'IBM Plex Mono', monospace !important; }
+    </style>
+    """
 
 
 def main():
@@ -1861,263 +2215,14 @@ def main():
 
     init_session_state()
 
-    # --- SINGLE APPLICATION THEME ---
-    st.markdown("""
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
-
-        :root {
-            --paper: #0b1220;
-            --surface: #111b2d;
-            --ink: #e8eef8;
-            --muted: #91a0b8;
-            --line: #26344b;
-            --accent: #22d3c7;
-            --accent-soft: rgba(34, 211, 199, 0.12);
-            --violet: #7c6cf6;
-            --warm: #f0a36a;
-        }
-
-        /* Main background and reading measure */
-        .stApp {
-            background-color: var(--paper);
-            background-image: radial-gradient(circle at 78% 0%, rgba(124,108,246,0.16), transparent 31rem), radial-gradient(circle at 12% 15%, rgba(34,211,199,0.10), transparent 26rem), radial-gradient(rgba(150, 170, 200, 0.12) 1px, transparent 1px);
-            background-size: auto, auto, 24px 24px;
-            background-position: center, center, 0 0;
-            color: var(--ink);
-            font-family: 'Inter', sans-serif;
-        }
-        [data-testid="stHeader"], .stApp > header { background: transparent !important; }
-        [data-testid="stToolbar"] { background: transparent !important; }
-        .main .block-container {
-            max-width: 1440px;
-            padding: 2.6rem 4.5rem 5rem;
-        }
-        h1, h2, h3, h4 {
-            color: var(--ink) !important;
-            font-family: 'Space Grotesk', sans-serif !important;
-            letter-spacing: 0 !important;
-        }
-        h1 { font-size: 2.15rem !important; line-height: 1.15 !important; }
-        h2 { font-size: 1.55rem !important; margin-top: 2rem !important; }
-        h3 { font-size: 1.12rem !important; }
-        p, li, label, [data-testid="stMarkdownContainer"] { color: var(--ink); }
-        .stCaption, [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
-
-        /* Manual cover header */
-        .vlab-header {
-            background: linear-gradient(135deg, rgba(17,27,45,0.96), rgba(18,27,50,0.88));
-            border: 1px solid var(--line);
-            border-top: 2px solid var(--accent);
-            border-radius: 18px;
-            box-shadow: 0 18px 70px rgba(0,0,0,0.25);
-            padding: 2rem 2.4rem 1.8rem;
-            margin-bottom: 2.7rem;
-        }
-        .vlab-header h1 {
-            color: var(--ink) !important;
-            margin: 0;
-            font-size: 2rem !important;
-            font-weight: 700 !important;
-        }
-        .hero-eyebrow { color: var(--accent); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
-        .experiment-cover .hero-eyebrow { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
-        .hero-dot { display: inline-block; width: 7px; height: 7px; margin-right: 0.55rem; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); vertical-align: 1px; }
-        .hero-title-row { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin-top: 0.75rem; }
-        .hero-title-row h1 { margin: 0 !important; }
-        .hero-badge { background: linear-gradient(135deg, var(--accent), var(--violet)); color: #07111e; padding: 0.35rem 0.75rem; border-radius: 999px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; white-space: nowrap; }
-        .vlab-header p.subtitle {
-            color: var(--muted);
-            font-size: 0.98rem;
-            margin: 0.7rem 0 0;
-        }
-        .vlab-header span.badge {
-            background: var(--accent-soft);
-            color: var(--accent);
-            padding: 0.25rem 0.55rem;
-            border-radius: 2px;
-            font-size: 0.72rem;
-            font-weight: 600;
-            letter-spacing: 0.08em;
-            white-space: nowrap;
-            margin-left: 0.75rem;
-            vertical-align: middle;
-        }
-
-        .manual-kicker, .manual-label {
-            color: var(--accent) !important;
-            font-size: 0.72rem !important;
-            font-weight: 700 !important;
-            letter-spacing: 0.13em !important;
-            text-transform: uppercase;
-        }
-        .manual-intro {
-            border-left: 3px solid var(--accent);
-            padding: 0.55rem 1rem;
-            margin: 1.1rem 0 2rem;
-            background: rgba(231, 239, 237, 0.55);
-        }
-        .experiment-cover {
-            display: grid;
-            grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
-            gap: 2rem;
-            align-items: center;
-            background: var(--surface);
-            border: 1px solid var(--line);
-            border-top: 3px solid var(--accent);
-            padding: 2.6rem 2.8rem;
-            margin: 1.6rem 0 1.8rem;
-        }
-        .experiment-cover h2 {
-            font-size: clamp(2rem, 4vw, 3.35rem) !important;
-            line-height: 1.05 !important;
-            margin: 0.7rem 0 1rem !important;
-        }
-        .cover-copy p { max-width: 34rem; color: var(--muted); font-size: 1.02rem; line-height: 1.65; }
-        .cover-meta { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; color: var(--muted); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
-        .cover-meta span { border-left: 2px solid var(--accent); padding-left: 0.55rem; }
-        .cover-visual { min-height: 250px; display: grid; place-items: center; background: #f2f5f1; border: 1px solid var(--line); }
-        .cover-visual svg { width: 100%; max-width: 430px; height: auto; }
-        .graph-line { fill: none; stroke: #9bb6b1; stroke-width: 2; stroke-dasharray: 5 5; }
-        .graph-line.faint { stroke: #c7d4d0; }
-        .graph-node { fill: #20252b; stroke: #f2f5f1; stroke-width: 6; }
-        .graph-node.node-teal { fill: #1e5b61; }
-        .graph-node.node-warm { fill: #b26a3d; }
-        .cover-visual text { fill: #68717a; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.04em; }
-        .concept-diagram { display: flex; align-items: center; justify-content: center; gap: 1.2rem; padding: 1.4rem 1rem; margin: 0.5rem 0 2rem; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-        .concept-diagram > div { display: grid; gap: 0.35rem; justify-items: center; }
-        .concept-diagram small { color: var(--muted); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
-        .diagram-node { display: inline-flex; align-items: center; justify-content: center; width: 4.8rem; height: 2.8rem; border: 2px solid var(--ink); color: var(--ink); font: 600 0.72rem 'IBM Plex Mono', monospace; }
-        .diagram-node.accent { border-color: var(--accent); color: var(--accent); }
-        .diagram-node.warm { border-color: var(--warm); color: var(--warm); }
-        .diagram-arrow { color: var(--accent); font-size: 1.5rem; }
-        .diagram-arrow small { display: block; font-size: 0.6rem; text-align: center; }
-        .report-facts { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 1.2rem 0 1.6rem; }
-        .report-fact { padding: 0.85rem 1rem; border-right: 1px solid var(--line); }
-        .report-fact:last-child { border-right: 0; }
-        .report-fact small { display: block; color: var(--muted); font-size: 0.67rem; letter-spacing: 0.1em; text-transform: uppercase; }
-        .report-fact strong { display: block; margin-top: 0.35rem; color: var(--ink); font-size: 1.05rem; overflow-wrap: anywhere; }
-        .quiz-progress { height: 4px; background: var(--line); margin: 1.2rem 0 2rem; }
-        .quiz-progress span { display: block; height: 100%; background: var(--accent); }
-        @media (max-width: 800px) {
-            .main .block-container { padding: 1.4rem 1.2rem 3rem; }
-            .experiment-cover { grid-template-columns: 1fr; padding: 1.6rem; }
-            .cover-visual { min-height: 190px; }
-            .report-facts { grid-template-columns: repeat(2, 1fr); }
-            .report-fact:nth-child(2) { border-right: 0; }
-            .report-fact:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
-        }
-
-        /* Framed tools only; ordinary content stays on the page */
-        .lab-card {
-            background: var(--surface);
-            border: 1px solid var(--line);
-            border-radius: 12px;
-            padding: 1.35rem;
-            margin-bottom: 1rem;
-        }
-
-        /* Streamlit widgets */
-        .stButton>button {
-            border-radius: 10px;
-            border: 1px solid var(--line);
-            color: var(--ink);
-            background: rgba(17,27,45,0.8);
-            font-weight: 600;
-            min-height: 2.4rem;
-        }
-        .stButton>button[kind="primary"] {
-            background: linear-gradient(135deg, var(--accent), var(--violet));
-            border-color: transparent;
-            color: #07111e;
-        }
-        .stButton>button:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); box-shadow: 0 8px 22px rgba(34,211,199,0.12); }
-        .stButton>button[kind="primary"]:hover { background: linear-gradient(135deg, #42e2d7, #9387ff); color: #07111e; }
-        [data-testid="stTextArea"] textarea {
-            font-family: 'IBM Plex Mono', monospace !important;
-            border-radius: 2px !important;
-            background: #fbfaf6 !important;
-        }
-        [data-testid="stTabs"] [role="tablist"] {
-            gap: 1.25rem;
-            border-bottom: 1px solid var(--line);
-        }
-        [data-testid="stTabs"] button[role="tab"] {
-            color: var(--muted);
-            font-weight: 600;
-            padding: 0.75rem 0.1rem;
-        }
-        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-            color: var(--accent);
-        }
-        [data-testid="stTabs"] button[role="tab"][aria-selected="true"]::after {
-            background: var(--accent);
-            height: 3px;
-        }
-        [data-testid="stDataFrame"] { border: 1px solid var(--line); }
-
-        /* Manual index sidebar */
-        [data-testid="stSidebar"] {
-            background: rgba(8, 15, 28, 0.96);
-            border-right: 1px solid var(--line);
-        }
-        [data-testid="stSidebar"] .block-container { padding: 2rem 1.4rem; }
-        .sidebar-brand {
-            color: var(--accent);
-            font-size: 1.1rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            margin-bottom: 0.65rem;
-        }
-        .sidebar-code {
-            color: var(--muted);
-            font-size: 0.72rem;
-            line-height: 1.55;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            margin-bottom: 2.2rem;
-        }
-        [data-testid="stSidebar"] [role="radiogroup"] label { padding: 0.25rem 0; }
-        [data-testid="stSidebar"] [role="radiogroup"] input[type="radio"] { position: absolute; opacity: 0; width: 1px; height: 1px; }
-        [data-testid="stSidebar"] [role="radiogroup"] label > div { border-radius: 10px; padding: 0.58rem 0.7rem; transition: background 160ms ease, color 160ms ease; }
-        [data-testid="stSidebar"] [role="radiogroup"] label:hover > div { background: rgba(34,211,199,0.09); }
-        [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) > div { background: linear-gradient(90deg, rgba(34,211,199,0.16), rgba(124,108,246,0.10)); color: var(--accent); box-shadow: inset 3px 0 var(--accent); }
-        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] { color: var(--muted); }
-        .sidebar-stat { border: 1px solid var(--line); border-radius: 10px; background: rgba(17,27,45,0.72); padding: 0.65rem 0.75rem; margin: 0.5rem 0; }
-        .sidebar-stat-label { display: block; color: var(--muted); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
-        .sidebar-stat-value { display: block; color: var(--accent); font-size: 0.9rem; font-weight: 700; margin-top: 0.2rem; }
-        [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-testid="stSelectbox"] div[data-baseweb="select"] > div, [data-testid="stDateInput"] input { background: rgba(8,15,28,0.72) !important; color: var(--ink) !important; border-color: var(--line) !important; border-radius: 10px !important; }
-        [data-testid="stTextInput"] input:focus, [data-testid="stTextArea"] textarea:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 1px var(--accent) !important; }
-        [data-testid="stAlert"] { border: 1px solid var(--line); border-radius: 12px; background: rgba(17,27,45,0.8); }
-        [data-testid="stTabs"] [role="tablist"] { gap: 0.5rem; border-bottom: 1px solid var(--line); }
-        [data-testid="stTabs"] button[role="tab"] { border-radius: 9px 9px 0 0; padding: 0.7rem 0.8rem; transition: background 160ms ease; }
-        [data-testid="stTabs"] button[role="tab"]:hover { background: rgba(34,211,199,0.08); }
-        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] { background: rgba(34,211,199,0.10); color: var(--accent); }
-        [data-testid="stTabs"] button[role="tab"][aria-selected="true"]::after { background: linear-gradient(90deg, var(--accent), var(--violet)); height: 3px; }
-        [data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-        [data-testid="stDataFrame"] iframe { background: var(--surface); }
-        [data-testid="stFormSubmitButton"] button { border-radius: 10px; }
-        .manual-intro { background: rgba(34,211,199,0.07); border-left-color: var(--accent); border-radius: 0 10px 10px 0; }
-        .experiment-cover { background: linear-gradient(135deg, rgba(17,27,45,0.96), rgba(23,28,57,0.9)); border-color: var(--line); border-radius: 16px; }
-        .cover-visual { background: rgba(8,15,28,0.55); border-color: var(--line); border-radius: 12px; }
-        .graph-line { stroke: rgba(34,211,199,0.65); }
-        .graph-line.faint { stroke: rgba(124,108,246,0.45); }
-        .graph-node { stroke: #111b2d; }
-        .cover-visual text { fill: var(--muted); }
-        .concept-diagram, .report-facts { border-color: var(--line); }
-        .diagram-node { border-color: var(--ink); color: var(--ink); }
-        .report-fact { border-color: var(--line); }
-        .report-fact strong { color: var(--accent); }
-        .quiz-progress { background: var(--line); }
-        .quiz-progress span { background: linear-gradient(90deg, var(--accent), var(--violet)); }
-        </style>
-    """, unsafe_allow_html=True)
+    # Dynamic application theme
+    st.markdown(get_app_styles(), unsafe_allow_html=True)
 
     # Navigation Sidebar
     st.sidebar.markdown('<div class="sidebar-brand">VIRTUAL LAB</div>', unsafe_allow_html=True)
     st.sidebar.markdown(f'<div class="sidebar-code">Database Management Systems<br>{EXPERIMENT_CONFIG["lab_code"]}</div>', unsafe_allow_html=True)
-    
-    navigation_options = ["01  Theory", "02  Simulation", "03  Knowledge Check", "04  Experiment Report"]
+
+    navigation_options = ["01  Theory", "02  Simulation", "03  Quiz", "04  Experiment Report"]
     requested_section = st.session_state.get("requested_section", navigation_options[0])
     section = st.sidebar.radio(
         "Navigation",
@@ -2144,7 +2249,7 @@ def main():
         render_theory_section()
     elif section == "02  Simulation":
         render_simulation_section()
-    elif section == "03  Knowledge Check":
+    elif section == "03  Quiz":
         render_quiz_section()
     elif section == "04  Experiment Report":
         render_report_section()
@@ -2152,3 +2257,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
