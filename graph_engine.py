@@ -255,16 +255,16 @@ class PropertyGraph:
         self.add_node("ma101", ["Course"], {"name": "Linear Algebra & Calculus", "code": "MA101", "credits": 4, "level": "UG"})
 
         # Faculty
-        self.add_node("prof_sharma", ["Faculty", "Person"], {"name": "Prof. R. Sharma", "dept": "CSE", "role": "HOD", "experience_yrs": 18})
-        self.add_node("prof_banerjee", ["Faculty", "Person"], {"name": "Prof. S. Banerjee", "dept": "CSE", "role": "Professor", "experience_yrs": 12})
-        self.add_node("prof_gupta", ["Faculty", "Person"], {"name": "Prof. A. Gupta", "dept": "EE", "role": "Assoc. Professor", "experience_yrs": 8})
+        self.add_node("prof_sharma", ["Faculty"], {"name": "Prof. R. Sharma", "dept": "CSE", "role": "HOD", "experience_yrs": 18})
+        self.add_node("prof_banerjee", ["Faculty"], {"name": "Prof. S. Banerjee", "dept": "CSE", "role": "Professor", "experience_yrs": 12})
+        self.add_node("prof_gupta", ["Faculty"], {"name": "Prof. A. Gupta", "dept": "EE", "role": "Assoc. Professor", "experience_yrs": 8})
 
         # Students
-        self.add_node("s_alice", ["Student", "Person"], {"name": "Alice Smith", "roll": "21CS01", "dept": "CSE", "gpa": 3.85, "year": 3})
-        self.add_node("s_bob", ["Student", "Person"], {"name": "Bob Kumar", "roll": "21CS02", "dept": "CSE", "gpa": 3.40, "year": 3})
-        self.add_node("s_charlie", ["Student", "Person"], {"name": "Charlie Roy", "roll": "22EE05", "dept": "EE", "gpa": 3.92, "year": 2})
-        self.add_node("s_diana", ["Student", "Person"], {"name": "Diana Das", "roll": "22CS14", "dept": "CSE", "gpa": 3.65, "year": 2})
-        self.add_node("s_evan", ["Student", "Person"], {"name": "Evan Sen", "roll": "23CS20", "dept": "CSE", "gpa": 3.20, "year": 1})
+        self.add_node("s_alice", ["Student"], {"name": "Alice Smith", "roll": "21CS01", "dept": "CSE", "gpa": 9.15, "year": 3})
+        self.add_node("s_bob", ["Student"], {"name": "Bob Kumar", "roll": "21CS02", "dept": "CSE", "gpa": 8.40, "year": 3})
+        self.add_node("s_charlie", ["Student"], {"name": "Charlie Roy", "roll": "22EE05", "dept": "EE", "gpa": 9.60, "year": 2})
+        self.add_node("s_diana", ["Student"], {"name": "Diana Das", "roll": "22CS14", "dept": "CSE", "gpa": 8.85, "year": 2})
+        self.add_node("s_evan", ["Student"], {"name": "Evan Sen", "roll": "23CS20", "dept": "CSE", "gpa": 7.90, "year": 1})
 
         # Relationships
         # Faculty -> Department (BELONGS_TO)
@@ -555,7 +555,7 @@ class CypherEngine:
         return self.graph.add_relationship(src_id, tgt_id, rel_type, props)
 
     def _parse_props_string(self, props_str: str) -> Dict[str, Any]:
-        """Parses {name: 'Alice', gpa: 3.8, active: true}."""
+        """Parses {name: 'Alice', gpa: 9.1, active: true}."""
         res = {}
         # Split by comma outside quotes
         pairs = re.findall(r'(\w+)\s*:\s*([^\'"][^,]*|\'[^\']*\'|"[^"]*")', props_str)
@@ -999,7 +999,7 @@ class CypherEngine:
     def _evaluate_where(self, where_str: str, binding: Dict[str, Any]) -> bool:
         """
         Evaluates WHERE clauses like:
-          s.gpa >= 3.5 AND c.credits > 3
+          s.gpa >= 8.5 AND c.credits > 3
           s.dept = 'CSE' OR s.name CONTAINS 'Alice'
         """
         # Support basic AND / OR chaining
@@ -1079,7 +1079,7 @@ class CypherEngine:
     def _execute_set(self, set_clause: str, bindings: List[Dict[str, Any]]) -> int:
         """
         Executes SET clause:
-          SET s.gpa = 3.9, s.status = 'Graduated'
+          SET s.gpa = 9.2, s.status = 'Graduated'
         """
         assignments = [a.strip() for a in set_clause.split(",") if a.strip()]
         affected_count = 0

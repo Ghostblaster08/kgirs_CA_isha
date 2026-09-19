@@ -114,8 +114,8 @@ Neo4j is the world's leading open-source native property graph database. Its cor
 
 3. **Core Property Graph Elements**:
    - **Nodes**: Discrete domain entities (e.g., a student `Alice`, a course `DBMS`, a department `CSE`). Nodes can possess zero, one, or multiple labels.
-   - **Labels**: Tags used to categorize nodes into semantic groups or roles (e.g., `:Student`, `:Faculty`, `:Person`). Labels serve as entry-point indexes.
-   - **Properties**: Arbitrary key-value pairs associated with either nodes or relationships (e.g., `{name: 'Alice', gpa: 3.85}`).
+   - **Labels**: Tags used to categorize nodes into semantic groups or roles (e.g., `:Student`, `:Faculty`, `:Course`). Labels serve as entry-point indexes.
+   - **Properties**: Arbitrary key-value pairs associated with either nodes or relationships (e.g., `{name: 'Alice', gpa: 9.15}`).
    - **Relationships**: Directed connections between two nodes. Every relationship **must have a name/type** (e.g., `[:ENROLLED_IN]`), a designated start node, and an end node. Relationships can also hold properties (e.g., `{semester: '5th', grade: 'Ex'}`).
    - **Directionality**: While relationships are stored with a definite direction (from start node to end node), Cypher queries can traverse them in outgoing `(a)-[r]->(b)`, incoming `(a)<-[r]-(b)`, or bidirectional / undirected `(a)-[r]-(b)` modes.
     """,
@@ -132,7 +132,7 @@ Cypher is a declarative graph query language that utilizes visual, **ASCII-art s
 1. **CREATE (Create entities and connections)**:
    ```cypher
    // Create a new Student node
-   CREATE (s:Student {id: 's_rahul', name: 'Rahul Sen', dept: 'CSE', gpa: 3.82})
+   CREATE (s:Student {id: 's_rahul', name: 'Rahul Sen', dept: 'CSE', gpa: 9.20})
    RETURN s;
 
    // Create a relationship between existing nodes
@@ -152,7 +152,7 @@ Cypher is a declarative graph query language that utilizes visual, **ASCII-art s
    ```cypher
    // Filter by numeric threshold and string pattern
    MATCH (s:Student)-[:ENROLLED_IN]->(c:Course)
-   WHERE s.gpa >= 3.5 AND c.credits >= 4
+   WHERE s.gpa >= 8.5 AND c.credits >= 4
    RETURN s.name, s.gpa, c.name, c.credits;
    ```
 
@@ -160,7 +160,7 @@ Cypher is a declarative graph query language that utilizes visual, **ASCII-art s
    ```cypher
    // Update property value
    MATCH (s:Student {id: 's_rahul'})
-   SET s.gpa = 3.90, s.status = 'Dean List'
+   SET s.gpa = 9.40, s.status = 'Dean List'
    RETURN s;
    ```
 
@@ -263,9 +263,9 @@ Cypher is a declarative graph query language that utilizes visual, **ASCII-art s
     """,
     "key_terms": {
         "Node (Vertex)": "A fundamental graph entity representing a distinct object (e.g., Student, Faculty, Course).",
-        "Label": "A semantic tag applied to nodes for categorization, schema definition, and indexing (e.g., :Student, :Person).",
+        "Label": "A semantic tag applied to nodes for categorization, schema definition, and indexing (e.g., :Student, :Faculty, :Course).",
         "Relationship (Edge)": "A directed connection between two nodes with a mandatory type and direction (e.g., [:ENROLLED_IN]).",
-        "Property": "A key-value attribute associated with a node or relationship (e.g., gpa: 3.85, credits: 4).",
+        "Property": "A key-value attribute associated with a node or relationship (e.g., gpa: 9.15, credits: 4).",
         "Index-Free Adjacency (IFA)": "Architecture where nodes hold direct physical memory pointers to adjacent relationships and nodes, ensuring O(1) traversal.",
         "Cypher": "The declarative, ASCII-art pattern matching query language used by Neo4j and standardized under openCypher / GQL.",
         "DETACH DELETE": "A Cypher operation that safely deletes a node by first stripping all connected incoming and outgoing relationships.",
@@ -344,12 +344,12 @@ QUIZ_QUESTIONS = [
     },
     {
         "id": 6,
-        "question": "Which Cypher statement correctly updates the GPA of student 'Alice' to 3.95 and adds an 'honors' property?",
+        "question": "Which Cypher statement correctly updates the GPA of student 'Alice' to 9.50 and adds an 'honors' property?",
         "options": [
-            "A) UPDATE (s:Student {name: 'Alice'}) SET gpa = 3.95, honors = true",
-            "B) MATCH (s:Student {name: 'Alice'}) SET s.gpa = 3.95, s.honors = true RETURN s",
-            "C) MODIFY Student Alice (gpa: 3.95, honors: true)",
-            "D) ALTER NODE (s:Student) WHERE name='Alice' ADD gpa=3.95"
+            "A) UPDATE (s:Student {name: 'Alice'}) SET gpa = 9.50, honors = true",
+            "B) MATCH (s:Student {name: 'Alice'}) SET s.gpa = 9.50, s.honors = true RETURN s",
+            "C) MODIFY Student Alice (gpa: 9.50, honors: true)",
+            "D) ALTER NODE (s:Student) WHERE name='Alice' ADD gpa=9.50"
         ],
         "answer_index": 1,
         "explanation": "In Cypher, property updates are performed using the 'SET' clause following a 'MATCH' pattern: 'MATCH (s) SET s.prop = val'."
@@ -608,7 +608,7 @@ PRESET_SCHEMAS = {
     "University Academic Knowledge Graph (Default)": {
         "node_labels": ["Student", "Course", "Faculty", "Department", "Project", "Custom..."],
         "default_properties": {
-            "Student": {"id_prefix": "s_", "name": "Kiran Patel", "key1": "dept", "val1": "CSE", "key2": "gpa", "val2": "3.80"},
+            "Student": {"id_prefix": "s_", "name": "Kiran Patel", "key1": "dept", "val1": "CSE", "key2": "gpa", "val2": "8.80"},
             "Course": {"id_prefix": "cs_", "name": "Machine Learning", "key1": "code", "val1": "CS401", "key2": "credits", "val2": "4"},
             "Faculty": {"id_prefix": "prof_", "name": "Prof. V. Rao", "key1": "dept", "val1": "CSE", "key2": "role", "val2": "Professor"},
             "Department": {"id_prefix": "dept_", "name": "Information Technology", "key1": "code", "val1": "IT", "key2": "building", "val2": "Aryabhatta"},
@@ -641,13 +641,13 @@ PRESET_SCHEMAS = {
             "-- Select an Educational Cypher Example --": "",
             "1. Match all nodes and inspect entire graph": "MATCH (n) RETURN n",
             "2. Match enrolled students and their courses": "MATCH (s:Student)-[:ENROLLED_IN]->(c:Course) RETURN s.name, c.name, s.gpa",
-            "3. Filter high-performing students (WHERE clause)": "MATCH (s:Student) WHERE s.gpa >= 3.5 RETURN s.name, s.dept, s.gpa",
+            "3. Filter high-performing students (WHERE clause)": "MATCH (s:Student) WHERE s.gpa >= 8.5 RETURN s.name, s.dept, s.gpa",
             "4. Multi-hop traversal: Faculty teaching enrolled students": "MATCH (f:Faculty)-[:TEACHES]->(c:Course)<-[:ENROLLED_IN]-(s:Student) RETURN f.name, c.name, s.name",
             "5. Aggregate enrollment counts per course (count)": "MATCH (c:Course)<-[:ENROLLED_IN]-(s:Student) RETURN c.name, count(s) AS total_enrolled",
             "6. Prerequisite chain traversal (Course -> Course)": "MATCH (c1:Course)-[:PREREQUISITE_OF]->(c2:Course) RETURN c1.name, c2.name",
-            "7. CREATE a new Student node": "CREATE (s:Student {id: 's_kiran', name: 'Kiran Patel', dept: 'CSE', gpa: 3.78}) RETURN s",
+            "7. CREATE a new Student node": "CREATE (s:Student {id: 's_kiran', name: 'Kiran Patel', dept: 'CSE', gpa: 8.75}) RETURN s",
             "8. Connect new Student to Course (CREATE relationship)": "MATCH (s:Student {id: 's_kiran'}), (c:Course {name: 'Database Management Systems'}) CREATE (s)-[:ENROLLED_IN {grade: 'A', semester: '5th'}]->(c) RETURN s, c",
-            "9. Update student GPA using SET": "MATCH (s:Student {id: 's_kiran'}) SET s.gpa = 3.92 RETURN s",
+            "9. Update student GPA using SET": "MATCH (s:Student {id: 's_kiran'}) SET s.gpa = 9.40 RETURN s",
             "10. Safely remove student using DETACH DELETE": "MATCH (s:Student {id: 's_kiran'}) DETACH DELETE s"
         }
     },
@@ -806,6 +806,19 @@ def get_node_color(label: str) -> str:
     return palette[abs(hash(label)) % len(palette)]
 
 
+def get_primary_label(labels: Any) -> str:
+    """Returns the primary label for a node, prioritizing domain entities (e.g. Student, Faculty) over generic labels."""
+    if not labels:
+        return "Entity"
+    lbl_list = list(labels)
+    # Prefer specific domain entities like Student, Faculty in academic/university context
+    priority = ["Student", "Faculty", "Course", "Department", "Project", "Account", "Device", "Merchant", "Group", "Topic"]
+    for pref in priority:
+        if pref in lbl_list:
+            return pref
+    return sorted(lbl_list)[0]
+
+
 def render_graph_figure(graph: PropertyGraph,
                          matched_node_ids: Optional[List[str]] = None,
                          matched_rel_ids: Optional[List[str]] = None,
@@ -850,7 +863,7 @@ def render_graph_figure(graph: PropertyGraph,
     elif layout_algorithm == "Shell":
         label_groups = {}
         for nid, node in graph.nodes.items():
-            primary_lbl = sorted(list(node.labels))[0] if node.labels else "Default"
+            primary_lbl = get_primary_label(node.labels)
             label_groups.setdefault(primary_lbl, []).append(nid)
         pos = nx.shell_layout(G, nlist=list(label_groups.values()))
     else:  # Default Spring
@@ -913,7 +926,7 @@ def render_graph_figure(graph: PropertyGraph,
     # 2. Node Traces (Grouped by Primary Label for clean legend)
     nodes_by_label: Dict[str, List[str]] = {}
     for nid, node in graph.nodes.items():
-        primary_label = sorted(list(node.labels))[0] if node.labels else "Entity"
+        primary_label = get_primary_label(node.labels)
         nodes_by_label.setdefault(primary_label, []).append(nid)
 
     for label_name, nids in nodes_by_label.items():
@@ -1024,7 +1037,7 @@ def render_interactive_graph_canvas(graph: PropertyGraph,
     matched_rids = set(matched_rel_ids) if matched_rel_ids else set()
     
     for nid, node in graph.nodes.items():
-        primary_label = sorted(list(node.labels))[0] if node.labels else "Entity"
+        primary_label = get_primary_label(node.labels)
         base_color = get_node_color(primary_label)
         
         is_matched = nid in matched_nids
@@ -1306,7 +1319,7 @@ def render_graph_concept_diagram():
 def render_theory_section():
     """Renders Section 1: Theory, Background, Architecture, Cypher, and Procedure."""
     st.markdown('<div class="manual-kicker">01 / Theoretical Framework</div>', unsafe_allow_html=True)
-    st.header("Graph Databases & Neo4j")
+    st.header("Graph Databases")
     st.markdown('<div class="manual-intro"><strong>Aim</strong><br>' + THEORY_CONTENT["aim"] + '</div>', unsafe_allow_html=True)
 
     st.subheader("Learning Objectives")
@@ -1319,7 +1332,7 @@ def render_theory_section():
     tabs = st.tabs([
         "Introduction", 
         "RDBMS vs Graph", 
-        "Neo4j Architecture", 
+        "Graph Architecture", 
         "Cypher & CRUD", 
         "Procedure", 
         "Glossary"
@@ -1456,7 +1469,7 @@ def render_simulation_section():
             st.write("")
             view_mode = st.radio(
                 "Graph Rendering Engine:",
-                ["Interactive Neo4j Canvas (Recommended)", "Static Plotly Layout"],
+                ["Interactive Graph Canvas (Recommended)", "Static Plotly Layout"],
                 horizontal=True,
                 label_visibility="collapsed"
             )
@@ -1467,7 +1480,7 @@ def render_simulation_section():
                 st.session_state["matched_rel_ids"] = []
                 st.rerun()
 
-        if view_mode == "Interactive Neo4j Canvas (Recommended)":
+        if view_mode == "Interactive Graph Canvas (Recommended)":
             render_interactive_graph_canvas(
                 graph=graph,
                 matched_node_ids=st.session_state.get("matched_node_ids"),
@@ -1860,7 +1873,7 @@ def render_quiz_section():
     """Renders Section 3: Assessment Quiz with Self-Grading and Feedback."""
     st.markdown('<div class="manual-kicker">03 / Knowledge Check</div>', unsafe_allow_html=True)
     st.header("Practical Assessment")
-    st.markdown('<div class="manual-intro">Test your understanding of graph databases, Neo4j architecture, and Cypher query syntax.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="manual-intro">Test your understanding of graph databases, graph architecture, and Cypher query syntax.</div>', unsafe_allow_html=True)
     st.markdown(
         f'<div class="manual-label">Assessment / {len(QUIZ_QUESTIONS)} questions</div>'
         f'<div class="quiz-progress"><span style="width: {100 / len(QUIZ_QUESTIONS):.2f}%"></span></div>',
@@ -2014,7 +2027,7 @@ def render_report_section():
         st.download_button(
             label="Download lab_report.pdf",
             data=pdf_bytes,
-            file_name="neo4j_graph_lab_report.pdf",
+            file_name="graph_lab_report.pdf",
             mime="application/pdf",
             key="stream_pdf_btn",
             use_container_width=True
