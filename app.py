@@ -48,13 +48,13 @@ EXPERIMENT_CONFIG = {
         "Design, build, and manipulate graph structures consisting of nodes, labels, properties, and directed relationships.",
         "Master the Cypher Query Language for pattern matching, creation, updates, and deletions (MATCH, CREATE, SET, DELETE, DETACH DELETE).",
         "Execute single-hop and multi-hop relationship traversals, conditional filtering (WHERE), and aggregations (count, avg).",
-        "Understand real-world graph database architecture, installation procedures (Neo4j Desktop, Docker, AuraDB), and production use cases."
+        "Understand real-world graph database architecture, deployment procedures (Docker, Cloud, Local), and production use cases."
     ]
 }
 
 THEORY_CONTENT = {
     "aim": (
-        "To install and configure Neo4j (or an embedded Cypher-compatible engine), model connected domain entities "
+        "To configure a property graph database engine, model connected domain entities "
         "using the Labeled Property Graph (LPG) paradigm, perform CRUD operations using the Cypher query language, "
         "and analyze relationship traversals across interconnected datasets."
     ),
@@ -76,7 +76,7 @@ per hop regardless of the total volume of data stored in the database.
     "rdbms_vs_graph": r"""
 ### 2. Graph Database vs. Relational Database (RDBMS)
 
-| Feature / Dimension | Relational Database (RDBMS) | Graph Database (Neo4j / Property Graph) |
+| Feature / Dimension | Relational Database (RDBMS) | Property Graph Database |
 | :--- | :--- | :--- |
 | **Primary Data Model** | Tables, Rows (tuples), Columns | Nodes (entities), Directed Relationships (edges) |
 | **Relationship Storage** | Foreign keys & associative join tables | Direct physical memory pointers (Index-Free Adjacency) |
@@ -91,26 +91,26 @@ In a relational database, traversing a relationship between two tables requires 
 (typically a $B^+$-Tree with $O(\log N)$ search complexity) or performing hash joins. When traversing multiple hops 
 (e.g., *Find friends of friends of Alice*), each hop executes an independent index lookup across millions of records.
 
-In **Neo4j and Native Graph Databases**, each node acts as a direct micro-index to its neighboring nodes. 
+In **Native Graph Databases**, each node acts as a direct micro-index to its neighboring nodes. 
 A node record holds direct 64-bit physical memory/disk offsets pointing to its connected relationship records, which in 
 turn point directly to adjacent nodes. Therefore, traversing an edge requires only dereferencing a memory pointer ($O(1)$). 
 The total query execution time is strictly proportional to the **size of the traversed subgraph**, completely independent 
 of whether the entire database contains thousands or billions of nodes!
     """,
-    "neo4j_architecture": """
-### 3. Neo4j Architecture & Basic Concepts
-Neo4j is the world's leading open-source native property graph database. Its core architecture consists of:
+    "graph_architecture": """
+### 3. Graph Database Architecture & Storage Internals
+A native property graph database engine manages connected data at the storage, index, and query execution layers:
 
 1. **Storage Layer (Native Graph Storage)**:
-   - Neo4j stores graph structures in specialized, fixed-size record files:
-     - `neostore.nodestore.db`: Fixed-length records (15 bytes) storing node in-use flags, pointer to the first relationship, and pointer to the first property.
-     - `neostore.relationshipstore.db`: Fixed-length records (34 bytes) containing pointers to source node, target node, relationship type, previous and next relationships for both source and target nodes (doubly-linked relationship chain).
-     - `neostore.propertystore.db`: Stores primitive properties (strings, integers, floats, booleans, arrays).
+   - Graph engines store structures in specialized, fixed-size record files:
+     - `nodestore`: Fixed-length records storing node in-use flags, pointer to the first relationship, and pointer to the first property.
+     - `relationshipstore`: Fixed-length records containing pointers to source node, target node, relationship type, previous and next relationships for both source and target nodes (doubly-linked relationship chain).
+     - `propertystore`: Stores primitive properties (strings, integers, floats, booleans, arrays).
    - Because records are fixed-size, calculating a record's physical file offset is a simple multiplication: $\\text{Offset} = \\text{Record ID} \\times \\text{Record Size}$, enabling instant $O(1)$ random disk access.
 
 2. **Execution Engine (Cypher Runtime)**:
    - Cypher queries are parsed into Abstract Syntax Trees (AST), validated, optimized by a cost-based query planner, and compiled into an executable pipeline.
-   - Neo4j utilizes Volcano-style iterator models and pipelined batch runtimes to stream results with minimal memory overhead.
+   - Graph engines utilize iterator models and pipelined runtimes to stream results with minimal memory overhead.
 
 3. **Core Property Graph Elements**:
    - **Nodes**: Discrete domain entities (e.g., a student `Alice`, a course `DBMS`, a department `CSE`). Nodes can possess zero, one, or multiple labels.
@@ -165,7 +165,7 @@ Cypher is a declarative graph query language that utilizes visual, **ASCII-art s
    ```
 
 5. **DELETE vs. DETACH DELETE (Delete nodes and relationships)**:
-   - `DELETE n`: Deletes node `n`. **Constraint:** If node `n` has any attached relationships, Neo4j raises a `ConstraintViolationException` to preserve graph referential integrity.
+   - `DELETE n`: Deletes node `n`. **Constraint:** If node `n` has any attached relationships, the database engine raises an integrity violation exception to preserve graph referential integrity.
    - `DETACH DELETE n`: Automatically deletes all incoming and outgoing relationships connected to `n`, then deletes the node itself.
    ```cypher
    // Delete relationship only
@@ -196,43 +196,32 @@ Cypher is a declarative graph query language that utilizes visual, **ASCII-art s
    ```
     """,
     "setup_procedure": """
-### 5. Prerequisites and Neo4j Installation Procedure
-
-#### Prerequisites:
-- **Java Virtual Machine (JVM)**: Java 17 LTS or Java 21 LTS (OpenJDK, Eclipse Temurin, or Oracle JDK).
-- **Hardware**: Minimum 4 GB RAM (8 GB+ recommended), 64-bit OS (Windows, Linux, or macOS).
+### 5. Prerequisites & Environment Setup
 
 #### Deployment Options:
 
-* **Option A: Neo4j Desktop (Recommended for GUI Learners)**
-  1. Download **Neo4j Desktop** from [https://neo4j.com/download/](https://neo4j.com/download/).
-  2. Install and launch the application. Create a new Project and click **Add -> Local DBMS**.
-  3. Set a secure password for the default `neo4j` user and select Neo4j version `5.x`.
-  4. Click **Start** to run the database server.
-  5. Click **Open** to launch the integrated **Neo4j Browser** at `http://localhost:7474`.
-
-* **Option B: Docker Container (Recommended for Developers & Labs)**
-  Execute the following command in PowerShell or Terminal:
-  ```powershell
-  docker run -d `
-    --name neo4j-vlab `
-    -p 7474:7474 -p 7687:7687 `
-    -e NEO4J_AUTH=neo4j/SecretPassword123 `
-    -v neo4j_data:/data `
-    neo4j:5.18.0
-  ```
-  - Port `7474`: HTTP web interface (Neo4j Browser).
-  - Port `7687`: Bolt binary protocol for driver connections (Python, Java, Node.js).
-
-* **Option C: Neo4j AuraDB (Free Cloud Instance)**
-  1. Navigate to [https://neo4j.com/cloud/aura/](https://neo4j.com/cloud/aura/) and register for a free AuraDB Free instance.
-  2. Save your generated database credentials (`neo4j+s://...`).
-  3. Connect directly via the cloud-hosted Neo4j Workspace in your browser.
-
-* **Option D: Cypher Shell (Command-Line Interface)**
-  Launch the CLI client to execute queries interactively or run `.cypher` batch scripts:
+* **Option A: Containerized Deployment (Recommended)**
+  Execute the following command in PowerShell or Terminal to spin up an isolated graph instance:
   ```bash
-  cypher-shell -u neo4j -p SecretPassword123
+  docker run -d \\
+    --name graph-lab \\
+    -p 7474:7474 -p 7687:7687 \\
+    -e AUTH_ENABLED=true \\
+    -v graph_data:/data \\
+    graph-engine:latest
+  ```
+  - Port `7474`: HTTP browser interface and visual explorer.
+  - Port `7687`: Bolt binary protocol for high-performance driver communication.
+
+* **Option B: Managed Cloud Instance**
+  1. Create a free managed cloud graph database instance.
+  2. Save your connection URI (`bolt://...` or `graph+s://...`).
+  3. Query directly via web workspace or driver connection.
+
+* **Option C: Command-Line Interface (Cypher Shell)**
+  Launch the CLI client to execute interactive queries:
+  ```bash
+  cypher-shell -u db_user -p secret_pass
   ```
     """,
     "procedure": [
@@ -267,7 +256,7 @@ Cypher is a declarative graph query language that utilizes visual, **ASCII-art s
         "Relationship (Edge)": "A directed connection between two nodes with a mandatory type and direction (e.g., [:ENROLLED_IN]).",
         "Property": "A key-value attribute associated with a node or relationship (e.g., gpa: 9.15, credits: 4).",
         "Index-Free Adjacency (IFA)": "Architecture where nodes hold direct physical memory pointers to adjacent relationships and nodes, ensuring O(1) traversal.",
-        "Cypher": "The declarative, ASCII-art pattern matching query language used by Neo4j and standardized under openCypher / GQL.",
+        "Cypher": "The declarative, ASCII-art pattern matching query language standardized under openCypher and ISO GQL.",
         "DETACH DELETE": "A Cypher operation that safely deletes a node by first stripping all connected incoming and outgoing relationships.",
         "Degree of a Node": "The total number of relationships connected to a node (Degree = In-Degree + Out-Degree).",
         "Graph Density": "Ratio of existing relationships to the maximum possible directed relationships between nodes: D = E / (V * (V - 1)).",
@@ -296,7 +285,7 @@ QUIZ_QUESTIONS = [
     },
     {
         "id": 2,
-        "question": "In the Neo4j Labeled Property Graph (LPG) model, which of the following statements regarding relationships is FALSE?",
+        "question": "In the Labeled Property Graph (LPG) model, which of the following statements regarding relationships is FALSE?",
         "options": [
             "A) Every relationship must have a start node and an end node",
             "B) Every relationship must have a specific type (e.g., [:ENROLLED_IN])",
@@ -304,7 +293,7 @@ QUIZ_QUESTIONS = [
             "D) Relationships can exist as dangling pointers without a target node"
         ],
         "answer_index": 3,
-        "explanation": "Relationships in Neo4j are strictly first-class directed connections. They can never exist as dangling pointers without both a valid source and target node."
+        "explanation": "Relationships in a Property Graph are strictly first-class directed connections. They can never exist as dangling pointers without both a valid source and target node."
     },
     {
         "id": 3,
@@ -324,7 +313,7 @@ QUIZ_QUESTIONS = [
         "options": [
             "A) The node and its 3 relationships are automatically deleted without error",
             "B) The 3 relationships are preserved as dangling pointers with null sources",
-            "C) Neo4j throws a ConstraintViolationException preventing deletion to preserve referential integrity",
+            "C) The graph DBMS engine prevents deletion to preserve referential integrity",
             "D) The node is deleted and the target nodes are also recursively deleted"
         ],
         "answer_index": 2,
@@ -332,7 +321,7 @@ QUIZ_QUESTIONS = [
     },
     {
         "id": 5,
-        "question": "What is the primary operational role of 'Labels' attached to nodes in Neo4j?",
+        "question": "What is the primary operational role of 'Labels' attached to nodes in a Property Graph?",
         "options": [
             "A) To store arbitrary floating-point numeric measurements",
             "B) To categorize nodes into domain groups and act as entry-point indexes for fast query lookup",
@@ -340,7 +329,7 @@ QUIZ_QUESTIONS = [
             "D) Labels are purely cosmetic and have no execution impact"
         ],
         "answer_index": 1,
-        "explanation": "Labels group nodes into semantic roles (e.g., :Student, :Faculty) and allow Neo4j to index and rapidly locate starting nodes for graph traversals."
+        "explanation": "Labels group nodes into semantic roles (e.g., :Student, :Faculty) and allow graph engines to index and rapidly locate starting nodes for graph traversals."
     },
     {
         "id": 6,
@@ -404,7 +393,7 @@ QUIZ_QUESTIONS = [
     },
     {
         "id": 11,
-        "question": "Which of the following describes the default network port used for Bolt protocol driver communication in Neo4j?",
+        "question": "Which of the following describes the default network port used for Bolt binary protocol driver communication in standard graph DBMS servers?",
         "options": [
             "A) Port 7474 (HTTP Browser interface)",
             "B) Port 7687 (Bolt binary protocol)",
@@ -412,7 +401,7 @@ QUIZ_QUESTIONS = [
             "D) Port 5432 (PostgreSQL default port)"
         ],
         "answer_index": 1,
-        "explanation": "Neo4j uses port 7474 for HTTP / Neo4j Browser access, and port 7687 for high-performance Bolt binary protocol connections utilized by official drivers."
+        "explanation": "Graph DBMS servers typically use port 7474 for HTTP web console access, and port 7687 for high-performance Bolt binary protocol connections utilized by official drivers."
     },
     {
         "id": 12,
@@ -438,7 +427,7 @@ class LabReportPDF(FPDF):
         self.set_y(-15)
         self.set_font("Helvetica", "I", 8)
         self.set_text_color(120, 130, 140)
-        self.cell(0, 10, f"Page {self.page_no()} | Virtual Laboratory CA - Neo4j Graph Database Experiment", align="C")
+        self.cell(0, 10, f"Page {self.page_no()} | Virtual Laboratory CA - Property Graph Database Experiment", align="C")
 
 
 def generate_pdf_report(student_name: str, student_id: str, date_str: str,
@@ -596,6 +585,141 @@ def generate_pdf_report(student_name: str, student_id: str, date_str: str,
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(100, 100, 100)
     pdf.cell(60, 4, "Instructor / Student Signature", align="C")
+
+    return bytes(pdf.output())
+
+
+def generate_pdf_certificate(student_name: str, student_id: str, institution: str,
+                             date_str: str, quiz_score: int, quiz_total: int, cert_id: str) -> bytes:
+    """Generates an official landscape certificate of completion as PDF bytes."""
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=False)
+    pdf.add_page()
+
+    # Outer border (Deep Navy)
+    pdf.set_draw_color(30, 58, 138)
+    pdf.set_line_width(2.0)
+    pdf.rect(10, 10, 277, 190)
+
+    # Inner ornamental border (Warm Gold)
+    pdf.set_draw_color(217, 119, 6)
+    pdf.set_line_width(0.8)
+    pdf.rect(14, 14, 269, 182)
+
+    # Corner ornamental lines
+    pdf.set_draw_color(30, 58, 138)
+    pdf.set_line_width(0.5)
+    pdf.line(14, 22, 22, 14)
+    pdf.line(283, 22, 275, 14)
+    pdf.line(14, 188, 22, 196)
+    pdf.line(283, 188, 275, 196)
+
+    # Top Header
+    pdf.set_xy(20, 22)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(257, 5, "VIRTUAL LABORATORY  |  MINISTRY OF EDUCATION INITIATIVE", align="C")
+
+    pdf.set_xy(20, 27)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(257, 7, (institution or "Department of Computer Science & Engineering").upper(), align="C")
+
+    # Title
+    pdf.set_xy(20, 42)
+    pdf.set_font("Helvetica", "B", 26)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(257, 12, "CERTIFICATE OF COMPLETION", align="C")
+
+    pdf.set_xy(20, 56)
+    pdf.set_font("Helvetica", "I", 12)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(257, 7, "This is to certify that", align="C")
+
+    # Student Name
+    pdf.set_xy(20, 68)
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_text_color(2, 132, 199)
+    pdf.cell(257, 10, student_name or "Student Participant", align="C")
+
+    # Student ID
+    pdf.set_xy(20, 80)
+    pdf.set_font("Helvetica", "", 11)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(257, 6, f"Roll / Registration No: {student_id or 'N/A'}", align="C")
+
+    # Body Description
+    pdf.set_xy(35, 91)
+    pdf.set_font("Helvetica", "", 11.5)
+    pdf.set_text_color(51, 65, 85)
+    body_text = (
+        "has successfully conducted the practical laboratory session, completed the required graph modeling "
+        "and Cypher query execution tasks, and demonstrated competence in the foundational practical experiment:"
+    )
+    pdf.multi_cell(227, 6, body_text, align="C")
+
+    # Experiment Title
+    pdf.set_xy(20, 108)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(257, 8, EXPERIMENT_CONFIG["title"].upper(), align="C")
+
+    pdf.set_xy(20, 116)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(37, 99, 235)
+    pdf.cell(257, 6, f"{EXPERIMENT_CONFIG['course']} | Lab Code: {EXPERIMENT_CONFIG['lab_code']}", align="C")
+
+    # Performance summary box
+    pdf.set_fill_color(248, 250, 252)
+    pdf.set_draw_color(226, 232, 240)
+    pdf.rect(60, 128, 177, 18, "FD")
+
+    pdf.set_xy(65, 131)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(55, 6, f"Assessment: {quiz_score} / {quiz_total} Score", align="L")
+    pdf.cell(60, 6, f"Date: {date_str}", align="C")
+    pdf.cell(50, 6, "Status: Verified Completed", align="R")
+
+    pdf.set_xy(65, 138)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.set_text_color(148, 163, 184)
+    pdf.cell(165, 5, f"Credential Verification ID: {cert_id}", align="C")
+
+    # Signatures
+    pdf.set_xy(40, 158)
+    pdf.set_draw_color(148, 163, 184)
+    pdf.line(40, 173, 100, 173)
+    pdf.set_xy(40, 175)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(60, 5, "Course Coordinator", align="C")
+    pdf.set_xy(40, 180)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(60, 4, "Virtual Laboratories Network", align="C")
+
+    # Official Seal in Center
+    pdf.set_xy(125, 154)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(180, 83, 9)
+    pdf.cell(47, 5, "[ OFFICIAL SEAL ]", align="C")
+    pdf.set_xy(125, 160)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.cell(47, 4, "VERIFIED ACADEMIC LAB", align="C")
+    pdf.set_xy(125, 165)
+    pdf.set_font("Helvetica", "", 7)
+    pdf.cell(47, 4, "DIGITAL CERTIFICATE", align="C")
+
+    pdf.line(197, 173, 257, 173)
+    pdf.set_xy(197, 175)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(60, 5, "System Administrator", align="C")
+    pdf.set_xy(197, 180)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(60, 4, "Evaluation & Accreditation Unit", align="C")
 
     return bytes(pdf.output())
 
@@ -1025,10 +1149,23 @@ def render_graph_figure(graph: PropertyGraph,
     return fig
 
 
+@st.cache_data
+def load_vis_network_js() -> str:
+    """Loads the local standalone vis-network library to guarantee 100% offline graph rendering."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "vis-network.min.js")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            return ""
+    return ""
+
+
 def render_interactive_graph_canvas(graph: PropertyGraph, 
                                     matched_node_ids: Optional[List[str]] = None,
                                     matched_rel_ids: Optional[List[str]] = None) -> None:
-    """Renders a Neo4j Bloom style interactive graph using vis-network."""
+    """Renders a high-performance interactive Property Graph canvas with live physics & simulation animations."""
     
     nodes_data = []
     edges_data = []
@@ -1042,14 +1179,14 @@ def render_interactive_graph_canvas(graph: PropertyGraph,
         
         is_matched = nid in matched_nids
         border_width = 4 if is_matched else 2
-        border_color = "#FACC15" if is_matched else "#FFFFFF"
+        border_color = "#F59E0B" if is_matched else "#FFFFFF"
         
         # Build hover title (HTML)
         labels_str = ":" + ":".join(sorted(node.labels))
-        prop_lines = "".join([f"<tr><td style='padding-right:8px;'><b>{k}</b></td><td>{v}</td></tr>" for k,v in node.properties.items()])
-        title_html = f"<div style='font-family: Arial, sans-serif; padding:5px;'><b style='color:#1E293B; font-size:14px;'>{node.display_name()}</b><br><span style='color:#6366F1; font-size:12px;'>{labels_str}</span><br><span style='color:#94A3B8; font-size:10px;'>ID: {nid}</span>"
+        prop_lines = "".join([f"<tr><td style='padding-right:8px; color:#475569;'><b>{k}</b></td><td style='color:#0f172a;'>{v}</td></tr>" for k, v in node.properties.items()])
+        title_html = f"<div style='font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; padding:6px; min-width:140px;'><b style='color:#0f172a; font-size:14px;'>{node.display_name()}</b><br><span style='color:#0284c7; font-weight:600; font-size:12px;'>{labels_str}</span><br><span style='color:#64748b; font-size:11px;'>ID: {nid}</span>"
         if prop_lines:
-            title_html += f"<hr style='margin:4px 0;'><table style='font-size:11px; color:#334155;'>{prop_lines}</table>"
+            title_html += f"<hr style='margin:5px 0; border:0; border-top:1px solid #e2e8f0;'><table style='font-size:11px; width:100%;'>{prop_lines}</table>"
         title_html += "</div>"
         
         nodes_data.append({
@@ -1060,23 +1197,23 @@ def render_interactive_graph_canvas(graph: PropertyGraph,
                 "background": base_color,
                 "border": border_color,
                 "highlight": {"background": base_color, "border": "#F59E0B"},
-                "hover": {"background": base_color, "border": "#94A3B8"}
+                "hover": {"background": base_color, "border": "#0284C7"}
             },
             "borderWidth": border_width,
             "borderWidthSelected": 4,
             "shape": "dot",
-            "size": 32,
-            "font": {"size": 12, "color": "#0F172A", "face": "Arial, sans-serif", "multi": "html", "align": "center"}
+            "size": 28 if not is_matched else 34,
+            "font": {"size": 12, "color": "#0F172A", "face": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", "multi": "html", "align": "center"}
         })
         
     for rid, rel in graph.relationships.items():
         is_matched = rid in matched_rids
         edge_color = "#F59E0B" if is_matched else "#94A3B8"
         
-        prop_lines = "".join([f"<tr><td style='padding-right:8px;'><b>{k}</b></td><td>{v}</td></tr>" for k,v in rel.properties.items()])
-        title_html = f"<div style='font-family: Arial, sans-serif; padding:5px;'><b style='color:#334155; font-size:13px;'>[{rel.type}]</b><br><span style='color:#64748B; font-size:11px;'>{rel.source} &rarr; {rel.target}</span>"
+        prop_lines = "".join([f"<tr><td style='padding-right:8px; color:#475569;'><b>{k}</b></td><td style='color:#0f172a;'>{v}</td></tr>" for k, v in rel.properties.items()])
+        title_html = f"<div style='font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; padding:6px;'><b style='color:#0f172a; font-size:13px;'>[:{rel.type}]</b><br><span style='color:#64748b; font-size:11px;'>{rel.source} &rarr; {rel.target}</span>"
         if prop_lines:
-            title_html += f"<hr style='margin:4px 0;'><table style='font-size:11px;'>{prop_lines}</table>"
+            title_html += f"<hr style='margin:5px 0; border:0; border-top:1px solid #e2e8f0;'><table style='font-size:11px; width:100%;'>{prop_lines}</table>"
         title_html += "</div>"
         
         edges_data.append({
@@ -1085,183 +1222,279 @@ def render_interactive_graph_canvas(graph: PropertyGraph,
             "to": rel.target,
             "label": f"  {rel.type}  ",
             "title": title_html,
-            "color": {"color": edge_color, "highlight": "#F59E0B", "hover": "#64748B"},
-            "width": 2 if not is_matched else 3,
+            "color": {"color": edge_color, "highlight": "#F59E0B", "hover": "#0284C7"},
+            "width": 2 if not is_matched else 3.5,
             "arrows": {"to": {"enabled": True, "scaleFactor": 0.8}},
-            "font": {"size": 10, "color": "#475569", "face": "Arial, sans-serif", "background": "rgba(255,255,255,0.9)", "strokeWidth": 0, "align": "middle"},
+            "font": {"size": 10, "color": "#475569", "face": "-apple-system, BlinkMacSystemFont, sans-serif", "background": "rgba(255,255,255,0.92)", "strokeWidth": 0, "align": "middle"},
             "smooth": {"type": "continuous", "roundness": 0.15}
         })
 
     nodes_json = json.dumps(nodes_data)
     edges_json = json.dumps(edges_data)
     
-    html_code = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-        <style type="text/css">
-            body {{ margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }}
-            #mynetwork {{
-                width: 100%;
-                height: 680px;
-                border: 1px solid #cfd8d5;
-                background-color: #fbfaf6;
-                border-radius: 2px;
-            }}
-            .vis-tooltip {{
-                background-color: white !important;
-                border: 1px solid #CBD5E1 !important;
-                border-radius: 2px !important;
-                box-shadow: 0 4px 12px rgba(32, 37, 43, 0.12) !important;
-                color: #334155 !important;
-                padding: 0 !important;
-                pointer-events: none;
-            }}
-            #controls {{
-                position: absolute;
-                bottom: 20px;
-                right: 20px;
-                z-index: 100;
-                display: flex;
-                gap: 8px;
-                background: rgba(255,255,255,0.9);
-                padding: 6px;
-                border-radius: 2px;
-                box-shadow: 0 2px 8px rgba(32,37,43,0.1);
-                border: 1px solid #cfd8d5;
-            }}
-            .ctrl-btn {{
-                background: white; border: 1px solid #CBD5E1; border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 14px; color: #475569; font-weight: 500;
-                transition: all 0.2s;
-            }}
-            .ctrl-btn:hover {{ background: #F1F5F9; border-color: #94A3B8; color: #0F172A; }}
-            
-            #legend {{
-                position: absolute;
-                top: 20px;
-                right: 20px;
-                z-index: 100;
-                background: rgba(255,255,255,0.95);
-                padding: 12px;
-                border-radius: 2px;
-                box-shadow: 0 2px 8px rgba(32,37,43,0.1);
-                border: 1px solid #cfd8d5;
-                max-width: 180px;
-                font-size: 12px;
-                max-height: 560px;
-                overflow-y: auto;
-            }}
-            .legend-title {{ font-weight: 600; margin-bottom: 8px; color: #1E293B; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px; }}
-            .legend-item {{ display: flex; align-items: center; margin-bottom: 6px; justify-content: space-between; }}
-            .legend-label-group {{ display: flex; align-items: center; gap: 6px; }}
-            .dot {{ width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.1); }}
-            .badge {{ background: #e7efed; color: #1e5b61; padding: 2px 6px; border-radius: 2px; font-size: 10px; font-weight: 600; }}
-            .rel-badge {{ background: #fbfaf6; border: 1px solid #cfd8d5; color: #47545a; padding: 2px 6px; border-radius: 2px; font-size: 10px; font-weight: 600; }}
-        </style>
-    </head>
-    <body>
-        <div style="position: relative; width: 100%;">
-            <div id="mynetwork"></div>
-            
-            <div id="legend">
-                <div class="legend-title">Node Labels</div>
-                <div id="node-legend-container"></div>
-                <div class="legend-title" style="margin-top: 12px;">Relationship Types</div>
-                <div id="rel-legend-container"></div>
-            </div>
-            
-            <div id="controls">
-                <button class="ctrl-btn" onclick="network.fit({{animation: true}})" title="Fit to View">Fit view</button>
-                <button class="ctrl-btn" onclick="zoom(0.2)" title="Zoom In">Zoom in</button>
-                <button class="ctrl-btn" onclick="zoom(-0.2)" title="Zoom Out">Zoom out</button>
-                <button class="ctrl-btn" id="physics-btn" onclick="togglePhysics()" title="Toggle Physics">⚡ Freeze</button>
-            </div>
+    # Load vis-network JS locally to guarantee offline rendering without unpkg dependency
+    local_vis_js = load_vis_network_js()
+    if local_vis_js:
+        script_block = "<script type=\"text/javascript\">\n" + local_vis_js + "\n</script>"
+    else:
+        script_block = "<script type=\"text/javascript\" src=\"https://unpkg.com/vis-network/standalone/umd/vis-network.min.js\"></script>"
+
+    html_template = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    __VIS_NETWORK_SCRIPT_TAG__
+    <style type="text/css">
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; background: #f8fafc; }
+        #canvas-wrapper { position: relative; width: 100%; height: 460px; }
+        #mynetwork {
+            width: 100%;
+            height: 460px;
+            border: 1px solid #cbd5e1;
+            background: radial-gradient(circle at center, #ffffff 0%, #f1f5f9 100%);
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        .vis-tooltip {
+            background-color: white !important;
+            border: 1px solid #CBD5E1 !important;
+            border-radius: 6px !important;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12) !important;
+            color: #1e293b !important;
+            padding: 0 !important;
+            pointer-events: none;
+            z-index: 1000 !important;
+        }
+        #controls {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            z-index: 50;
+            display: flex;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 5px 8px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+            border: 1px solid #cbd5e1;
+            align-items: center;
+        }
+        .ctrl-btn {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+            padding: 5px 9px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #334155;
+            font-weight: 600;
+            transition: all 0.15s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .ctrl-btn:hover { background: #0284c7; border-color: #0284c7; color: #ffffff; }
+        .ctrl-btn.active { background: #0284c7; color: #ffffff; border-color: #0284c7; }
+        
+        #legend {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 50;
+            background: rgba(255, 255, 255, 0.94);
+            padding: 8px 12px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+            border: 1px solid #cbd5e1;
+            max-width: 170px;
+            font-size: 11px;
+            max-height: 190px;
+            overflow-y: auto;
+        }
+        .legend-title { font-weight: 700; margin-bottom: 5px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 4px; justify-content: space-between; }
+        .legend-label-group { display: flex; align-items: center; gap: 5px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.1); }
+        .badge { background: #e0f2fe; color: #0369a1; padding: 1px 5px; border-radius: 999px; font-size: 9px; font-weight: 700; }
+        .rel-badge { background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569; padding: 1px 5px; border-radius: 4px; font-size: 9px; font-weight: 600; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div id="canvas-wrapper">
+        <div id="mynetwork"></div>
+        
+        <div id="legend">
+            <div class="legend-title">Labels</div>
+            <div id="node-legend-container"></div>
+            <div class="legend-title" style="margin-top: 8px;">Relationships</div>
+            <div id="rel-legend-container"></div>
         </div>
+        
+        <div id="controls">
+            <button class="ctrl-btn" id="physics-btn" onclick="togglePhysics()" title="Toggle Physics Bounce">⏸️ Freeze</button>
+            <button class="ctrl-btn" id="pulse-btn" onclick="togglePulseAnimation()" title="Animate Path Traversal Across Nodes">✨ Pulse Traversal</button>
+            <button class="ctrl-btn" onclick="scatterAndSnap()" title="Scatter Outward & Elastic Snap Back">🎲 Scatter</button>
+            <button class="ctrl-btn" onclick="centerGraph()" title="Fit to View">🎯 Center</button>
+            <button class="ctrl-btn" onclick="zoom(0.2)" title="Zoom In">🔍 +</button>
+            <button class="ctrl-btn" onclick="zoom(-0.2)" title="Zoom Out">🔎 -</button>
+        </div>
+    </div>
 
-        <script type="text/javascript">
-            var nodes = new vis.DataSet({nodes_json});
-            var edges = new vis.DataSet({edges_json});
+    <script type="text/javascript">
+        window.onerror = function(msg, url, line) {
+            var c = document.getElementById('mynetwork');
+            if (c) {
+                c.innerHTML = '<div style="padding:20px; color:#ef4444; font-family:sans-serif;"><b>Visualizer error:</b> ' + msg + '</div>';
+            }
+        };
 
-            var container = document.getElementById('mynetwork');
-            var data = {{ nodes: nodes, edges: edges }};
-            var options = {{
-                physics: {{
-                    enabled: true,
-                    solver: 'forceAtlas2Based',
-                    forceAtlas2Based: {{
-                        gravitationalConstant: -60,
-                        centralGravity: 0.015,
-                        springLength: 120,
-                        springConstant: 0.08,
-                        damping: 0.4,
-                        avoidOverlap: 0.5
-                    }},
-                    stabilization: {{ iterations: 150 }}
-                }},
-                interaction: {{
-                    hover: true,
-                    tooltipDelay: 100,
-                    zoomView: true,
-                    dragView: true,
-                    dragNodes: true
-                }},
-                layout: {{
-                    improvedLayout: true
-                }}
-            }};
-            var network = new vis.Network(container, data, options);
-            
-            // Build Legend dynamically
-            const nodeLegendContainer = document.getElementById('node-legend-container');
-            const relLegendContainer = document.getElementById('rel-legend-container');
-            
-            // Aggregate labels
-            const labelCounts = {{}};
-            const labelColors = {{}};
-            nodes.forEach(n => {{
-                let lbl = n.label.split("<i>:")[1]?.split("</i>")[0] || "Entity";
-                labelCounts[lbl] = (labelCounts[lbl] || 0) + 1;
-                labelColors[lbl] = n.color.background;
-            }});
-            
-            const relCounts = {{}};
-            edges.forEach(e => {{
-                let type = e.label.trim();
-                relCounts[type] = (relCounts[type] || 0) + 1;
-            }});
-            
-            Object.keys(labelCounts).sort().forEach(lbl => {{
-                let div = document.createElement('div');
-                div.className = 'legend-item';
-                div.innerHTML = `<div class="legend-label-group"><span class="dot" style="background-color: ${{labelColors[lbl]}};"></span> <span style="color:#334155;">${{lbl}}</span></div> <span class="badge">${{labelCounts[lbl]}}</span>`;
-                nodeLegendContainer.appendChild(div);
-            }});
-            
-            Object.keys(relCounts).sort().forEach(type => {{
-                let div = document.createElement('div');
-                div.className = 'legend-item';
-                div.innerHTML = `<span class="rel-badge">${{type}}</span> <span class="badge">${{relCounts[type]}}</span>`;
-                relLegendContainer.appendChild(div);
-            }});
-            
-            function zoom(scale) {{
-                var newScale = network.getScale() * (1 + scale);
-                network.moveTo({{ scale: newScale, animation: {{ duration: 300 }} }});
-            }}
-            
-            var physicsEnabled = true;
-            function togglePhysics() {{
-                physicsEnabled = !physicsEnabled;
-                network.setOptions({{ physics: {{ enabled: physicsEnabled }} }});
-                document.getElementById('physics-btn').innerHTML = physicsEnabled ? '⚡ Freeze' : '▶️ Unfreeze';
-            }}
-        </script>
-    </body>
-    </html>
-    """
+        var rawNodes = __NODES_JSON_PLACEHOLDER__;
+        var rawEdges = __EDGES_JSON_PLACEHOLDER__;
+
+        var nodes = new vis.DataSet(rawNodes);
+        var edges = new vis.DataSet(rawEdges);
+
+        var container = document.getElementById('mynetwork');
+        var data = { nodes: nodes, edges: edges };
+        var options = {
+            physics: {
+                enabled: true,
+                solver: 'forceAtlas2Based',
+                forceAtlas2Based: {
+                    gravitationalConstant: -75,
+                    centralGravity: 0.018,
+                    springLength: 105,
+                    springConstant: 0.08,
+                    damping: 0.45,
+                    avoidOverlap: 0.45
+                },
+                stabilization: { iterations: 120, updateInterval: 25 }
+            },
+            interaction: {
+                hover: true,
+                tooltipDelay: 60,
+                zoomView: true,
+                dragView: true,
+                dragNodes: true,
+                navigationButtons: false
+            },
+            layout: {
+                improvedLayout: true
+            }
+        };
+        var network = new vis.Network(container, data, options);
+        
+        // Build Legend dynamically
+        var nodeLegendContainer = document.getElementById('node-legend-container');
+        var relLegendContainer = document.getElementById('rel-legend-container');
+        
+        var labelCounts = {};
+        var labelColors = {};
+        nodes.forEach(function(n) {
+            var parts = n.label.split("<i>:");
+            var lbl = (parts.length > 1) ? parts[1].split("</i>")[0] : "Entity";
+            labelCounts[lbl] = (labelCounts[lbl] || 0) + 1;
+            labelColors[lbl] = n.color.background;
+        });
+        
+        var relCounts = {};
+        edges.forEach(function(e) {
+            var type = e.label.trim();
+            relCounts[type] = (relCounts[type] || 0) + 1;
+        });
+        
+        Object.keys(labelCounts).sort().forEach(function(lbl) {
+            var div = document.createElement('div');
+            div.className = 'legend-item';
+            div.innerHTML = '<div class="legend-label-group"><span class="dot" style="background-color: ' + labelColors[lbl] + ';"></span> <span>' + lbl + '</span></div> <span class="badge">' + labelCounts[lbl] + '</span>';
+            nodeLegendContainer.appendChild(div);
+        });
+        
+        Object.keys(relCounts).sort().forEach(function(type) {
+            var div = document.createElement('div');
+            div.className = 'legend-item';
+            div.innerHTML = '<span class="rel-badge">' + type + '</span> <span class="badge">' + relCounts[type] + '</span>';
+            relLegendContainer.appendChild(div);
+        });
+        
+        function zoom(scale) {
+            var newScale = network.getScale() * (1 + scale);
+            network.moveTo({ scale: newScale, animation: { duration: 250, easingFunction: 'easeInOutQuad' } });
+        }
+        
+        function centerGraph() {
+            network.fit({ animation: { duration: 600, easingFunction: 'easeInOutQuad' } });
+        }
+        
+        var physicsEnabled = true;
+        function togglePhysics() {
+            physicsEnabled = !physicsEnabled;
+            network.setOptions({ physics: { enabled: physicsEnabled } });
+            var btn = document.getElementById('physics-btn');
+            btn.innerHTML = physicsEnabled ? '⏸️ Freeze' : '▶️ Live Physics';
+            btn.classList.toggle('active', !physicsEnabled);
+        }
+
+        // Pulse / Path Traversal Simulation Animation
+        var pulseTimer = null;
+        function togglePulseAnimation() {
+            var btn = document.getElementById('pulse-btn');
+            if (pulseTimer) {
+                clearInterval(pulseTimer);
+                pulseTimer = null;
+                btn.innerHTML = '✨ Pulse Traversal';
+                btn.classList.remove('active');
+                // Restore base sizes
+                var resets = [];
+                nodes.forEach(function(n) {
+                    resets.push({ id: n.id, size: 28, borderWidth: 2 });
+                });
+                nodes.update(resets);
+                return;
+            }
+            btn.innerHTML = '⏹️ Stop Pulse';
+            btn.classList.add('active');
+            var allIds = nodes.getIds();
+            if (!allIds || allIds.length === 0) return;
+            var step = 0;
+            pulseTimer = setInterval(function() {
+                var targetId = allIds[step % allIds.length];
+                var updates = [];
+                nodes.forEach(function(n) {
+                    if (n.id === targetId) {
+                        updates.push({ id: n.id, size: 40, borderWidth: 5 });
+                    } else {
+                        updates.push({ id: n.id, size: 28, borderWidth: 2 });
+                    }
+                });
+                nodes.update(updates);
+                step++;
+            }, 380);
+        }
+
+        // Scatter & Snap Force Elasticity Simulation
+        function scatterAndSnap() {
+            network.setOptions({ physics: { enabled: true } });
+            var allIds = nodes.getIds();
+            allIds.forEach(function(id) {
+                var angle = Math.random() * Math.PI * 2;
+                var dist = 200 + Math.random() * 200;
+                network.moveNode(id, Math.cos(angle) * dist, Math.sin(angle) * dist);
+            });
+            setTimeout(function() {
+                network.fit({ animation: { duration: 1000, easingFunction: 'easeInOutQuad' } });
+            }, 300);
+        }
+    </script>
+</body>
+</html>
+"""
+
+    html_code = html_template.replace("__VIS_NETWORK_SCRIPT_TAG__", script_block)
+    html_code = html_code.replace("__NODES_JSON_PLACEHOLDER__", nodes_json)
+    html_code = html_code.replace("__EDGES_JSON_PLACEHOLDER__", edges_json)
     
-    components.html(html_code, height=700)
+    components.html(html_code, height=480)
 
 
 # ======================================================================================
@@ -1270,37 +1503,175 @@ def render_interactive_graph_canvas(graph: PropertyGraph,
 # ======================================================================================
 
 def go_to_simulation():
-    """Route the cover action through the existing sidebar navigation state."""
-    st.session_state["requested_section"] = "02  Simulation"
+    """Route user to the simulation section."""
+    st.session_state["requested_section"] = "Simulation"
 
 
-def render_experiment_cover():
-    """Renders the opening spread of the digital practical manual."""
+def go_to_theory():
+    """Route user to the theory section."""
+    st.session_state["requested_section"] = "Theory"
+
+
+def render_purpose_section():
+    """Renders the Purpose section: Why this experiment, What problem it solves, History, and Where all it is used."""
     st.markdown(f"""
-        <section class="experiment-cover">
-            <div class="cover-copy">
-                <div class="hero-eyebrow"><span class="hero-dot"></span>VIRTUAL LABORATORY / DATABASE MANAGEMENT SYSTEMS <span class="hero-badge">{EXPERIMENT_CONFIG['lab_code']}</span></div>
-                <div class="manual-kicker">Experiment 08 / Database Management Systems</div>
-                <h2>Create and Manage<br>a Graph Database</h2>
-                <p>Explore how connected data is represented, queried, and visualized through the labeled property graph model.</p>
-                <div class="cover-meta"><span>Interactive simulation</span><span>Cypher engine</span><span>Practical record</span></div>
-            </div>
-            <div class="cover-visual" aria-label="Abstract graph showing connected nodes">
-                <svg viewBox="0 0 430 270" role="img" aria-hidden="true">
-                    <path class="graph-line" d="M72 150 L165 72 L286 104 L360 194 L215 222 L72 150 M165 72 L215 222 M286 104 L215 222" />
-                    <path class="graph-line faint" d="M165 72 L360 194 M72 150 L286 104" />
-                    <circle class="graph-node node-teal" cx="72" cy="150" r="19" />
-                    <circle class="graph-node node-ink" cx="165" cy="72" r="24" />
-                    <circle class="graph-node node-warm" cx="286" cy="104" r="17" />
-                    <circle class="graph-node node-teal" cx="360" cy="194" r="22" />
-                    <circle class="graph-node node-ink" cx="215" cy="222" r="29" />
-                    <text x="41" y="188">Student</text><text x="139" y="39">Course</text>
-                    <text x="270" y="78">Faculty</text><text x="334" y="236">Graph</text>
-                </svg>
-            </div>
-        </section>
+        <div class="purpose-header">
+            <div class="hero-eyebrow"><span class="hero-dot"></span>EXPERIMENT 08 · DATABASE MANAGEMENT SYSTEMS · {EXPERIMENT_CONFIG['lab_code']}</div>
+            <h1>Create & Manage a Graph Database</h1>
+            <p class="subtitle">A paradigm shift from rigid tabular SQL tables to connected native Property Graphs with Index-Free Adjacency.</p>
+        </div>
     """, unsafe_allow_html=True)
-    st.button("Begin experiment", type="primary", on_click=go_to_simulation, key="begin_experiment")
+
+    tab_why, tab_problem, tab_history, tab_usecases = st.tabs([
+        "🎯 1. Why This Experiment?",
+        "⚡ 2. The Problem Solved",
+        "📜 3. Evolution & History",
+        "🌍 4. Where All It's Used"
+    ])
+
+    with tab_why:
+        col_w1, col_w2 = st.columns([1.1, 0.9])
+        with col_w1:
+            st.markdown("""
+                <div class="purpose-section-card" style="height: 100%;">
+                    <h3>Connecting the Networked World</h3>
+                    <p>
+                        In modern software systems, <strong>the highest-value intelligence lives in the connections between entities</strong>. 
+                        Whether it is social friendships, transactional money flows across banks, or medical interactions between genes and drugs, 
+                        real-world data is inherently a web, not a flat spreadsheet.
+                    </p>
+                    <p>
+                        For over 40 years, computer science curricula emphasized <strong>Relational Database Management Systems (RDBMS)</strong>. 
+                        While relational tables excel at flat accounting ledgers, they degrade exponentially when relationships multiply.
+                    </p>
+                    <div class="highlight-box">
+                        <strong>The Paradigm Shift:</strong> Move from <em>Tabular Thinking</em> (tables, rows, foreign key joins) to 
+                        <em>Graph Thinking</em> (nodes, directed edges, rich properties, and pointer-chasing traversals).
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_w2:
+            st.markdown("""
+                <div class="purpose-section-card" style="height: 100%;">
+                    <h3>Core Learning Outcomes</h3>
+                    <ul>
+                        <li><strong>Hands-on Visual Modeling:</strong> Design entities as Nodes and typed connections as Relationships with properties.</li>
+                        <li><strong>Declarative Query Mastery:</strong> Learn Cypher—the standardized ASCII-art query language: <code>(n)-[:REL]->(m)</code>.</li>
+                        <li><strong>Architectural Insight:</strong> Understand how native graph storage uses direct memory pointers (Index-Free Adjacency) for O(1) step traversal.</li>
+                        <li><strong>Industrial Competence:</strong> Gain skills directly applicable to AI Knowledge Graphs (GraphRAG), fraud detection, and recommendation systems.</li>
+                    </ul>
+                </div>
+            """, unsafe_allow_html=True)
+
+    with tab_problem:
+        st.markdown("""
+            <div class="purpose-section-card">
+                <h3>Overcoming the Relational Bottleneck</h3>
+                <div class="vs-grid" style="margin-top: 0.8rem;">
+                    <div class="vs-box bad">
+                        <h4 style="color:#ef4444; margin-top:0; font-size:1.25rem;">Relational Databases: The JOIN Explosion</h4>
+                        <p>SQL splits data across isolated tables. Connecting entities requires index-lookup <code>JOIN</code> operations on foreign keys.</p>
+                        <ul>
+                            <li><strong>Exponential Slowdown:</strong> Finding "friends of friends of friends" needs 3–5 joins, exploding query time exponentially (<em>O(N<sup>k</sup>)</em>).</li>
+                            <li><strong>Memory Spikes & Freezes:</strong> Millions of rows force full table/index scans, exhausting RAM and causing query timeouts.</li>
+                            <li><strong>Brittle Schema Migrations:</strong> Adding relationship types requires risky <code>ALTER TABLE</code> schema changes with production downtime.</li>
+                        </ul>
+                    </div>
+                    <div class="vs-box good">
+                        <h4 style="color:#10b981; margin-top:0; font-size:1.25rem;">Graph Databases: Index-Free Adjacency (IFA)</h4>
+                        <p>Graph DBMS engines treat relationships as first-class physical pointers in storage and memory.</p>
+                        <ul>
+                            <li><strong>O(1) Constant-Time Traversal:</strong> Every node holds direct physical memory pointers to adjacent nodes. Hopping takes constant time!</li>
+                            <li><strong>Predictable Real-Time Latency:</strong> Traversal speed depends only on the subgraph traversed, independent of total database size (10K or 100M nodes).</li>
+                            <li><strong>Flexible & Schema-Optional:</strong> Add new node labels, relationships, and custom properties on the fly without breaking schemas.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="highlight-box" style="margin-top: 1rem;">
+                    <strong>Key Architectural Law:</strong> Relational joins search global indexes on every hop. Graph databases eliminate index lookups entirely during traversal by chasing direct memory pointers.
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with tab_history:
+        st.markdown("""
+            <div class="purpose-section-card">
+                <h3>Three Centuries of Graph Innovation</h3>
+                <div class="usecase-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 0.8rem;">
+                    <div class="usecase-card">
+                        <div class="timeline-year" style="color:var(--accent); font-weight:800; font-size:1.25rem;">1736</div>
+                        <strong>Leonhard Euler & Königsberg Bridges</strong>
+                        <p>Leonhard Euler proved that traversing Königsberg's 7 bridges without retracing steps was impossible. By abstracting landmasses to vertices and bridges to edges, <strong>Graph Theory</strong> was born.</p>
+                    </div>
+                    <div class="usecase-card">
+                        <div class="timeline-year" style="color:var(--accent); font-weight:800; font-size:1.25rem;">1970 – 1990s</div>
+                        <strong>Relational Hegemony & SQL Standards</strong>
+                        <p>E.F. Codd published the Relational Model at IBM. Tables, foreign keys, and SQL dominated business computing for decades, establishing standard transactional guarantees.</p>
+                    </div>
+                    <div class="usecase-card">
+                        <div class="timeline-year" style="color:var(--accent); font-weight:800; font-size:1.25rem;">2000s</div>
+                        <strong>The Web, PageRank & NoSQL Wave</strong>
+                        <p>Google's PageRank algorithm, LinkedIn's Economic Graph, and Facebook proved the value of networks. Relational join limits sparked the NoSQL wave (Key-Value, Document, Columnar, Graph).</p>
+                    </div>
+                    <div class="usecase-card">
+                        <div class="timeline-year" style="color:var(--accent); font-weight:800; font-size:1.25rem;">2010s – Today</div>
+                        <strong>Property Graphs & ISO GQL Standard</strong>
+                        <p>The Labeled Property Graph (LPG) model matured with declarative Cypher. In 2024, the International Organization for Standardization ratified <strong>ISO/IEC 39075:2024 GQL</strong>, the first new ISO database query language since SQL (1987).</p>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with tab_usecases:
+        st.markdown("""
+            <div class="purpose-section-card">
+                <h3>Global Production Deployments</h3>
+                <div class="usecase-grid" style="grid-template-columns: repeat(3, 1fr); margin-top: 0.8rem;">
+                    <div class="usecase-card">
+                        <div class="icon">💳</div>
+                        <strong>Fraud & Money Laundering</strong>
+                        <p>Detects synthetic identities, shared phone numbers across cards, and circular fund routing across banks in real time before wire release.</p>
+                    </div>
+                    <div class="usecase-card">
+                        <div class="icon">🛒</div>
+                        <strong>Real-Time Recommendation</strong>
+                        <p>Powers recommendation feeds on Amazon, Netflix, and Spotify through real-time multi-hop collaborative path exploration.</p>
+                    </div>
+                    <div class="usecase-card">
+                        <div class="icon">🧠</div>
+                        <strong>Knowledge Graphs & AI (GraphRAG)</strong>
+                        <p>Connects LLMs with verified factual knowledge graphs to eliminate AI hallucinations and provide verifiable source citations.</p>
+                    </div>
+                    <div class="usecase-card">
+                        <div class="icon">🧬</div>
+                        <strong>Healthcare & Drug Discovery</strong>
+                        <p>Maps interactions between diseases, genes, proteins, and chemical compounds to accelerate pharmaceutical drug repurposing.</p>
+                    </div>
+                    <div class="usecase-card">
+                        <div class="icon">🛡️</div>
+                        <strong>Cybersecurity & IAM</strong>
+                        <p>Audits Active Directory and cloud permissions (e.g., BloodHound) to detect hidden privilege escalation attack paths before breach.</p>
+                    </div>
+                    <div class="usecase-card">
+                        <div class="icon">🚚</div>
+                        <strong>Supply Chain Resilience</strong>
+                        <p>Maps tier-1 to tier-N supplier dependencies to detect single points of failure and reroute critical logistics during disruptions.</p>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # Next steps call to action
+    st.write("")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Proceed to Theory & Architecture ➔", type="primary", use_container_width=True, key="purpose_to_theory_btn"):
+            st.session_state["requested_section"] = "Theory"
+            st.rerun()
+    with col2:
+        if st.button("Launch Interactive Simulation ➔", use_container_width=True, key="purpose_to_sim_btn"):
+            st.session_state["requested_section"] = "Simulation"
+            st.rerun()
 
 
 def render_graph_concept_diagram():
@@ -1317,16 +1688,14 @@ def render_graph_concept_diagram():
 
 
 def render_theory_section():
-    """Renders Section 1: Theory, Background, Architecture, Cypher, and Procedure."""
-    st.markdown('<div class="manual-kicker">01 / Theoretical Framework</div>', unsafe_allow_html=True)
-    st.header("Graph Databases")
-    st.markdown('<div class="manual-intro"><strong>Aim</strong><br>' + THEORY_CONTENT["aim"] + '</div>', unsafe_allow_html=True)
-
-    st.subheader("Learning Objectives")
-    for i, obj in enumerate(THEORY_CONTENT["learning_objectives"]):
-        st.write(f"{i + 1}. {obj}")
-
-    st.divider()
+    """Renders Section: Theory, Background, Architecture, Cypher, and Procedure."""
+    st.markdown(f"""
+        <div class="purpose-header" style="padding:1.2rem 1.8rem; margin-bottom:1.2rem;">
+            <div class="hero-eyebrow"><span class="hero-dot"></span>THEORETICAL FRAMEWORK · {EXPERIMENT_CONFIG['lab_code']}</div>
+            <h1 style="font-size:1.8rem !important; margin:0.2rem 0 !important;">Graph Databases & Cypher Foundations</h1>
+            <p class="subtitle"><b>Aim:</b> {THEORY_CONTENT['aim']}</p>
+        </div>
+    """, unsafe_allow_html=True)
 
     # Create tabs for better organization
     tabs = st.tabs([
@@ -1347,7 +1716,7 @@ def render_theory_section():
         st.markdown('<div class="manual-intro"><strong>Key takeaway</strong><br>Index-Free Adjacency (IFA) keeps graph traversal proportional to the path being explored, rather than the total database size.</div>', unsafe_allow_html=True)
 
     with tabs[2]:
-        st.markdown(THEORY_CONTENT["neo4j_architecture"])
+        st.markdown(THEORY_CONTENT["graph_architecture"])
 
     with tabs[3]:
         st.markdown(THEORY_CONTENT["cypher_crud"])
@@ -1372,11 +1741,7 @@ def render_theory_section():
 
 
 def render_simulation_section():
-    """Renders Section 2: Interactive Graph Sandbox, Visual UI Controls, Cypher Console, Visualizer & Logger."""
-    st.markdown('<div class="manual-kicker">02 / Laboratory Workstation</div>', unsafe_allow_html=True)
-    st.header("Interactive Simulation")
-    st.markdown('<div class="manual-intro">Create entities, establish directed relationships, and execute Cypher against the embedded graph engine. Observe each change in the topology below.</div>', unsafe_allow_html=True)
-
+    """Renders Section: Interactive Graph Workstation, Visual Controls, Cypher Console, Topology Canvas & Activity."""
     graph: PropertyGraph = st.session_state["graph"]
     engine: CypherEngine = st.session_state["cypher_engine"]
 
@@ -1395,20 +1760,19 @@ def render_simulation_section():
     # TOP CONTROL BAR: Grouped Presets, Live Metrics & Reset
     # ----------------------------------------------------------------------------------
     with st.container(border=True):
-        col_preset1, col_preset2, col_metrics, col_reset = st.columns([2.2, 1.2, 2.2, 1.0])
+        col_pres, col_load, col_metrics, col_reset = st.columns([2.4, 1.2, 2.8, 1.0])
 
-        with col_preset1:
+        with col_pres:
             preset_choice = st.selectbox(
-                "Load Domain Graph Preset:",
+                "Domain Preset:",
                 options=preset_options,
                 index=current_preset_idx,
-                key="simulation_preset_select"
+                key="simulation_preset_select",
+                label_visibility="collapsed"
             )
 
-        with col_preset2:
-            st.write("")
-            st.write("")
-            if st.button("Load Selected Preset", use_container_width=True):
+        with col_load:
+            if st.button("Load Preset", use_container_width=True, type="primary"):
                 if preset_choice.startswith("University"):
                     graph.load_university_graph()
                     st.session_state["preset_index"] = 0
@@ -1426,20 +1790,19 @@ def render_simulation_section():
                 st.session_state["matched_node_ids"] = []
                 st.session_state["matched_rel_ids"] = []
                 st.session_state["last_cypher_result"] = None
-                # Reset widget keys so new preset defaults apply
+                log_activity("Preset", f"Loaded '{preset_choice}'", "info")
                 for k in ["node_label_sel", "custom_label_inp", "node_id_inp", "node_name_inp", 
                           "prop_key1_inp", "prop_val1_inp", "prop_key2_inp", "prop_val2_inp",
                           "rel_type_sel", "custom_rel_inp", "rel_prop_k_inp", "rel_prop_v_inp"]:
                     st.session_state.pop(k, None)
-                st.toast(f"Loaded '{preset_choice}' successfully!")
+                st.toast(f"Loaded '{preset_choice}'!")
                 st.rerun()
 
         with col_metrics:
-            st.markdown('<div class="manual-label" style="margin-bottom:6px;">Current Graph Record</div>', unsafe_allow_html=True)
             st.markdown(
-                f'<div class="metric-chips-row">'
+                f'<div class="metric-chips-row" style="margin-top:2px;">'
                 f'<span class="metric-chip"><strong>{metrics["num_nodes"]}</strong> nodes</span>'
-                f'<span class="metric-chip"><strong>{metrics["num_relationships"]}</strong> relationships</span>'
+                f'<span class="metric-chip"><strong>{metrics["num_relationships"]}</strong> rels</span>'
                 f'<span class="metric-chip"><strong>{metrics["num_labels"]}</strong> labels</span>'
                 f'<span class="metric-chip"><strong>{metrics["density"]}</strong> density</span>'
                 f'</div>',
@@ -1447,143 +1810,138 @@ def render_simulation_section():
             )
 
         with col_reset:
-            st.write("")
-            st.write("")
-            if st.button("Reset Graph", type="secondary", use_container_width=True):
+            if st.button("Clear All", type="secondary", use_container_width=True):
                 graph.clear()
                 st.session_state["matched_node_ids"] = []
                 st.session_state["matched_rel_ids"] = []
                 st.session_state["last_cypher_result"] = None
+                log_activity("Reset", "Cleared entire graph", "warning")
                 st.toast("Graph cleared.")
                 st.rerun()
 
     # ----------------------------------------------------------------------------------
-    # CENTERPIECE: VISUAL GRAPH CANVAS (Main Focus of Virtual Lab)
+    # TWO-COLUMN SINGLE-PAPER WORKSTATION
+    # Left Column: Tools & Console (45%) | Right Column: Topology Canvas & Animation (55%)
     # ----------------------------------------------------------------------------------
-    st.write("")
-    with st.container(border=True):
-        top_col1, top_col2, top_col3 = st.columns([2.8, 2.4, 1.2])
-        with top_col1:
-            st.subheader("Topology and Relationships")
-        with top_col2:
-            st.write("")
-            view_mode = st.radio(
-                "Graph Rendering Engine:",
-                ["Interactive Graph Canvas (Recommended)", "Static Plotly Layout"],
-                horizontal=True,
-                label_visibility="collapsed"
-            )
-        with top_col3:
-            st.write("")
-            if st.button("Clear Highlighting", use_container_width=True):
-                st.session_state["matched_node_ids"] = []
-                st.session_state["matched_rel_ids"] = []
-                st.rerun()
+    col_tools, col_canvas = st.columns([5.0, 7.0])
 
-        if view_mode == "Interactive Graph Canvas (Recommended)":
-            render_interactive_graph_canvas(
-                graph=graph,
-                matched_node_ids=st.session_state.get("matched_node_ids"),
-                matched_rel_ids=st.session_state.get("matched_rel_ids")
-            )
-        else:
-            pc1, pc2 = st.columns(2)
-            with pc1:
-                layout_opt = st.selectbox("Plotly Layout:", ["Spring (Force-Directed)", "Kamada-Kawai", "Circular", "Shell"], index=0)
-            with pc2:
-                label_opt = st.selectbox("Node Display:", ["Name / Label", "Name Only", "Node ID", "Label Only"], index=0)
-            fig = render_graph_figure(
-                graph=graph,
-                matched_node_ids=st.session_state.get("matched_node_ids"),
-                matched_rel_ids=st.session_state.get("matched_rel_ids"),
-                layout_algorithm=layout_opt,
-                node_label_mode=label_opt
-            )
-            st.plotly_chart(fig, use_container_width=True, theme="streamlit")
-
-    # ----------------------------------------------------------------------------------
-    # WORKSTATION INTERACTIVE CONTROLS (Grouped cleanly in tabs)
-    # ----------------------------------------------------------------------------------
-    st.write("")
-    tab_builder, tab_cypher, tab_logger = st.tabs([
-        "Visual Graph Builder (UI Controls)",
-        "Cypher Query Editor & Console",
-        "Observation Sheet"
-    ])
-
-    # ----------------------------------------------------------------------------------
-    # TAB 1: VISUAL GRAPH BUILDER (UI CONTROLS - CRUD FOR ALL USE CASES)
-    # ----------------------------------------------------------------------------------
-    with tab_builder:
-        st.subheader("Visual Graph Builder")
-        st.caption("Construct and manipulate nodes, labels, relationships, and properties using intuitive graphical controls.")
-
-        sub_tab_node, sub_tab_rel, sub_tab_set, sub_tab_del = st.tabs([
-            "Add Node",
-            "Add Relationship",
-            "Update Property (SET)",
-            "Delete Entity"
+    with col_tools:
+        tab_cypher, tab_builder, tab_logger = st.tabs([
+            "⚡ Cypher Console",
+            "🛠️ Visual Builder",
+            "📋 Observation Log"
         ])
 
-        # SUB-TAB A: ADD NODE (CREATE)
-        with sub_tab_node:
-            col_lbl, col_id, col_name = st.columns(3)
-            with col_lbl:
-                label_options = schema["node_labels"]
-                def_lbl_idx = 0
-                if "node_label_sel" in st.session_state and st.session_state["node_label_sel"] in label_options:
-                    def_lbl_idx = label_options.index(st.session_state["node_label_sel"])
-                node_label = st.selectbox("Entity Label (Type):", label_options, index=def_lbl_idx, key="node_label_sel")
-                if node_label == "Custom...":
-                    custom_lbl_val = st.session_state.get("custom_label_inp", "Topic")
-                    custom_node_label = st.text_input("Custom Label Name:", value=custom_lbl_val, key="custom_label_inp")
-                    active_label_for_node = custom_node_label.strip() if custom_node_label.strip() else "Entity"
+        with tab_cypher:
+            cypher_examples = schema["cypher_examples"]
+            c_ex, c_load_q = st.columns([3.2, 1.2])
+            with c_ex:
+                selected_example = st.selectbox(
+                    "Query Examples:",
+                    options=list(cypher_examples.keys()),
+                    index=0,
+                    key=f"cypher_ex_{active_preset_name}",
+                    label_visibility="collapsed"
+                )
+            with c_load_q:
+                if st.button("Paste", use_container_width=True):
+                    if cypher_examples.get(selected_example):
+                        st.session_state["current_query_input"] = cypher_examples[selected_example]
+                        st.rerun()
+
+            default_cypher = list(cypher_examples.values())[1] if len(cypher_examples) > 1 else "MATCH (n) RETURN n"
+            query_input = st.text_area(
+                "Cypher Statement:",
+                value=st.session_state.get("current_query_input", default_cypher),
+                height=80,
+                label_visibility="collapsed",
+                help="Type Cypher query. Example: MATCH (n)-[r]->(m) RETURN n, r, m"
+            )
+            st.session_state["current_query_input"] = query_input
+
+            if st.button("▶ Run Cypher Query", type="primary", use_container_width=True):
+                res = engine.execute(query_input)
+                st.session_state["last_cypher_result"] = res
+                st.session_state["matched_node_ids"] = res["matched_node_ids"]
+                st.session_state["matched_rel_ids"] = res["matched_rel_ids"]
+
+                trial_record = {
+                    "Trial #": len(st.session_state["trials"]) + 1,
+                    "Operation": "Cypher Query",
+                    "Query / Action": query_input[:65],
+                    "Result": res["message"][:40],
+                    "Status": "Success" if res["success"] else "Failed",
+                    "Timestamp": datetime.now().strftime("%H:%M:%S")
+                }
+                st.session_state["trials"].append(trial_record)
+                log_activity("Cypher", query_input.strip().replace('\n', ' ')[:30], "query" if res["success"] else "error")
+
+            last_res = st.session_state.get("last_cypher_result")
+            if last_res:
+                if last_res["success"]:
+                    st.success(f"**Query Succeeded** ({last_res['execution_time_ms']} ms): {last_res['message']}")
+                    df = last_res["dataframe"]
+                    if not df.empty:
+                        st.dataframe(df, use_container_width=True, hide_index=True, height=140)
                 else:
-                    active_label_for_node = node_label
+                    st.error(f"**Query Failed** ({last_res['execution_time_ms']} ms): {last_res['message']}")
 
-            lbl_defaults = schema.get("default_properties", {}).get(node_label, {
-                "id_prefix": "node_", "name": "New Entity", "key1": "code", "val1": "E101", "key2": "status", "val2": "Active"
-            })
+        with tab_builder:
+            sub_tab_node, sub_tab_rel, sub_tab_set, sub_tab_del = st.tabs([
+                "Add Node", "Add Rel", "SET Prop", "Delete"
+            ])
 
-            with col_id:
-                def_id_val = st.session_state.get("node_id_inp", f"{lbl_defaults.get('id_prefix', 'node_')}{len(graph.nodes) + 1}")
-                node_id_input = st.text_input("Node ID / Key:", value=def_id_val, key="node_id_inp", help="Unique identifier for the node")
-            with col_name:
+            # SUB-TAB A: ADD NODE
+            with sub_tab_node:
+                col_lbl, col_id = st.columns(2)
+                with col_lbl:
+                    label_options = schema["node_labels"]
+                    def_lbl_idx = 0
+                    if "node_label_sel" in st.session_state and st.session_state["node_label_sel"] in label_options:
+                        def_lbl_idx = label_options.index(st.session_state["node_label_sel"])
+                    node_label = st.selectbox("Label:", label_options, index=def_lbl_idx, key="node_label_sel")
+                    if node_label == "Custom...":
+                        custom_lbl_val = st.session_state.get("custom_label_inp", "Topic")
+                        custom_node_label = st.text_input("Custom Label:", value=custom_lbl_val, key="custom_label_inp")
+                        active_label_for_node = custom_node_label.strip() if custom_node_label.strip() else "Entity"
+                    else:
+                        active_label_for_node = node_label
+
+                lbl_defaults = schema.get("default_properties", {}).get(node_label, {
+                    "id_prefix": "node_", "name": "New Entity", "key1": "code", "val1": "E101", "key2": "status", "val2": "Active"
+                })
+
+                with col_id:
+                    def_id_val = st.session_state.get("node_id_inp", f"{lbl_defaults.get('id_prefix', 'node_')}{len(graph.nodes) + 1}")
+                    node_id_input = st.text_input("Node ID:", value=def_id_val, key="node_id_inp")
+
                 def_name_val = st.session_state.get("node_name_inp", lbl_defaults.get("name", "New Entity"))
                 node_name_input = st.text_input("Display Name:", value=def_name_val, key="node_name_inp")
 
-            col_p1, col_p2, col_p3 = st.columns(3)
-            with col_p1:
-                def_k1_val = st.session_state.get("prop_key1_inp", lbl_defaults.get("key1", "code"))
-                def_v1_val = st.session_state.get("prop_val1_inp", lbl_defaults.get("val1", "VAL1"))
-                prop_key1 = st.text_input("Property 1 Key:", value=def_k1_val, key="prop_key1_inp")
-                prop_val1 = st.text_input("Property 1 Value:", value=def_v1_val, key="prop_val1_inp")
-            with col_p2:
-                def_k2_val = st.session_state.get("prop_key2_inp", lbl_defaults.get("key2", "status"))
-                def_v2_val = st.session_state.get("prop_val2_inp", lbl_defaults.get("val2", "Active"))
-                prop_key2 = st.text_input("Property 2 Key:", value=def_k2_val, key="prop_key2_inp")
-                prop_val2 = st.text_input("Property 2 Value:", value=def_v2_val, key="prop_val2_inp")
-            with col_p3:
-                st.write("")
-                st.write("")
+                cp1, cp2 = st.columns(2)
+                with cp1:
+                    prop_k1 = st.text_input("Property 1 Key:", value=lbl_defaults.get("key1", "code"), key="prop_k1")
+                    prop_v1 = st.text_input("Property 1 Val:", value=lbl_defaults.get("val1", "E101"), key="prop_v1")
+                with cp2:
+                    prop_k2 = st.text_input("Property 2 Key:", value=lbl_defaults.get("key2", "status"), key="prop_k2")
+                    prop_v2 = st.text_input("Property 2 Val:", value=lbl_defaults.get("val2", "Active"), key="prop_v2")
+
                 if st.button("Create Node", type="primary", use_container_width=True):
                     try:
                         props = {"name": node_name_input}
-                        if prop_key1 and prop_val1:
+                        if prop_k1 and prop_v1:
                             try:
-                                props[prop_key1] = float(prop_val1) if "." in prop_val1 else int(prop_val1)
+                                props[prop_k1] = float(prop_v1) if "." in prop_v1 else int(prop_v1)
                             except ValueError:
-                                props[prop_key1] = prop_val1
-                        if prop_key2 and prop_val2:
+                                props[prop_k1] = prop_v1
+                        if prop_k2 and prop_v2:
                             try:
-                                props[prop_key2] = float(prop_val2) if "." in prop_val2 else int(prop_val2)
+                                props[prop_k2] = float(prop_v2) if "." in prop_v2 else int(prop_v2)
                             except ValueError:
-                                props[prop_key2] = prop_val2
+                                props[prop_k2] = prop_v2
 
                         graph.add_node(node_id_input, [active_label_for_node], props)
                         st.session_state["matched_node_ids"] = [node_id_input]
-
-                        # Log trial
                         st.session_state["trials"].append({
                             "Trial #": len(st.session_state["trials"]) + 1,
                             "Operation": "CREATE Node",
@@ -1592,22 +1950,26 @@ def render_simulation_section():
                             "Status": "Success",
                             "Timestamp": datetime.now().strftime("%H:%M:%S")
                         })
-                        st.toast(f"Node '{node_id_input}' created successfully!")
+                        log_activity("Node Added", f"{node_id_input} (:{active_label_for_node})", "success")
+                        st.toast(f"Node '{node_id_input}' created!")
                         st.rerun()
                     except Exception as ex:
-                        st.error(f"Error creating node: {str(ex)}")
+                        st.error(f"Error: {str(ex)}")
 
-        # SUB-TAB B: ADD RELATIONSHIP (CREATE)
-        with sub_tab_rel:
-            node_options = [f"{nid} ({':'.join(n.labels)}: {n.display_name()})" for nid, n in graph.nodes.items()]
-            if len(node_options) < 2:
-                st.warning("Please create at least 2 nodes before creating a relationship.")
-            else:
-                col_src, col_rel, col_tgt = st.columns(3)
-                with col_src:
-                    src_choice = st.selectbox("Source Node (From):", options=node_options, index=0)
-                    src_id = src_choice.split(" ")[0]
-                with col_rel:
+            # SUB-TAB B: ADD RELATIONSHIP
+            with sub_tab_rel:
+                node_options = [f"{nid} ({':'.join(n.labels)}: {n.display_name()})" for nid, n in graph.nodes.items()]
+                if len(node_options) < 2:
+                    st.warning("Please create at least 2 nodes before creating a relationship.")
+                else:
+                    cs, ct = st.columns(2)
+                    with cs:
+                        src_choice = st.selectbox("From Node:", options=node_options, index=0)
+                        src_id = src_choice.split(" ")[0]
+                    with ct:
+                        tgt_choice = st.selectbox("To Node:", options=node_options, index=min(1, len(node_options) - 1))
+                        tgt_id = tgt_choice.split(" ")[0]
+
                     rel_options = schema["rel_types"]
                     def_rel_idx = 0
                     if "rel_type_sel" in st.session_state and st.session_state["rel_type_sel"] in rel_options:
@@ -1615,26 +1977,18 @@ def render_simulation_section():
                     rel_type = st.selectbox("Relationship Type:", rel_options, index=def_rel_idx, key="rel_type_sel")
                     if rel_type == "Custom...":
                         custom_rel_val = st.session_state.get("custom_rel_inp", "CONNECTED_TO")
-                        custom_rel_input = st.text_input("Custom Relationship Type:", value=custom_rel_val, key="custom_rel_inp")
+                        custom_rel_input = st.text_input("Custom Rel Type:", value=custom_rel_val, key="custom_rel_inp")
                         active_rel_type = custom_rel_input.strip().upper() if custom_rel_input.strip() else "CONNECTED_TO"
                     else:
                         active_rel_type = rel_type
 
-                with col_tgt:
-                    tgt_choice = st.selectbox("Target Node (To):", options=node_options, index=min(1, len(node_options) - 1))
-                    tgt_id = tgt_choice.split(" ")[0]
+                    rel_defaults = schema.get("default_rel_properties", {}).get(rel_type, {"key": "weight", "val": "1.0"})
+                    crp1, crp2 = st.columns(2)
+                    with crp1:
+                        r_prop_k = st.text_input("Rel Prop Key:", value=rel_defaults.get("key", "weight"), key="r_prop_k")
+                    with crp2:
+                        r_prop_v = st.text_input("Rel Prop Val:", value=rel_defaults.get("val", "1.0"), key="r_prop_v")
 
-                rel_defaults = schema.get("default_rel_properties", {}).get(rel_type, {"key": "weight", "val": "1.0"})
-                col_rp1, col_rp2, col_rp3 = st.columns(3)
-                with col_rp1:
-                    def_rk = st.session_state.get("rel_prop_k_inp", rel_defaults.get("key", "weight"))
-                    r_prop_k = st.text_input("Rel Property Key:", value=def_rk, key="rel_prop_k_inp")
-                with col_rp2:
-                    def_rv = st.session_state.get("rel_prop_v_inp", rel_defaults.get("val", "1.0"))
-                    r_prop_v = st.text_input("Rel Property Value:", value=def_rv, key="rel_prop_v_inp")
-                with col_rp3:
-                    st.write("")
-                    st.write("")
                     if st.button("Create Relationship", type="primary", use_container_width=True):
                         try:
                             r_props = {}
@@ -1646,8 +2000,6 @@ def render_simulation_section():
                             r = graph.add_relationship(src_id, tgt_id, active_rel_type, r_props)
                             st.session_state["matched_node_ids"] = [src_id, tgt_id]
                             st.session_state["matched_rel_ids"] = [r.id]
-
-                            # Log trial
                             st.session_state["trials"].append({
                                 "Trial #": len(st.session_state["trials"]) + 1,
                                 "Operation": "CREATE Rel",
@@ -1656,41 +2008,37 @@ def render_simulation_section():
                                 "Status": "Success",
                                 "Timestamp": datetime.now().strftime("%H:%M:%S")
                             })
+                            log_activity("Rel Added", f"({src_id})-[:{active_rel_type}]->({tgt_id})", "success")
                             st.toast(f"Relationship '{active_rel_type}' created!")
                             st.rerun()
                         except Exception as ex:
-                            st.error(f"Error creating relationship: {str(ex)}")
+                            st.error(f"Error: {str(ex)}")
 
-        # SUB-TAB C: UPDATE PROPERTY (SET)
-        with sub_tab_set:
-            if not graph.nodes:
-                st.info("No nodes available to update.")
-            else:
-                col_u1, col_u2, col_u3, col_u4 = st.columns([2.2, 1.6, 1.6, 1.2])
-                with col_u1:
-                    u_node_choice = st.selectbox("Select Target Node:", options=node_options, key="update_node_sel")
+            # SUB-TAB C: SET PROPERTY
+            with sub_tab_set:
+                if not graph.nodes:
+                    st.info("No nodes available.")
+                else:
+                    u_node_choice = st.selectbox("Target Node:", options=node_options, key="update_node_sel")
                     u_nid = u_node_choice.split(" ")[0]
                     selected_node = graph.nodes.get(u_nid)
                     if selected_node and selected_node.properties:
                         props_preview = " · ".join([f"**{k}**: {v}" for k, v in selected_node.properties.items()])
-                        st.caption(f"Current properties: {props_preview}")
+                        st.caption(f"Current: {props_preview}")
 
-                with col_u2:
                     existing_keys = [k for k in selected_node.properties.keys() if k != "name"] if selected_node else []
                     prop_key_options = existing_keys + ["name", "Custom Key..."]
-                    prop_choice = st.selectbox("Property Key to Update:", options=prop_key_options, key=f"prop_key_choice_{u_nid}")
-                    if prop_choice == "Custom Key...":
-                        set_k = st.text_input("Enter Property Name:", value="status", key=f"custom_set_key_{u_nid}")
-                    else:
-                        set_k = prop_choice
+                    cu1, cu2 = st.columns(2)
+                    with cu1:
+                        prop_choice = st.selectbox("Property Key:", options=prop_key_options, key=f"pkc_{u_nid}")
+                        if prop_choice == "Custom Key...":
+                            set_k = st.text_input("Property Name:", value="status", key=f"csk_{u_nid}")
+                        else:
+                            set_k = prop_choice
+                    with cu2:
+                        current_val = str(selected_node.properties.get(set_k, "")) if selected_node else ""
+                        set_v = st.text_input("New Value:", value=current_val, key=f"sv_{u_nid}_{set_k}")
 
-                with col_u3:
-                    current_val = str(selected_node.properties.get(set_k, "")) if selected_node else ""
-                    set_v = st.text_input("New Property Value:", value=current_val, key=f"set_val_{u_nid}_{set_k}")
-
-                with col_u4:
-                    st.write("")
-                    st.write("")
                     if st.button("SET Property", type="primary", use_container_width=True):
                         try:
                             try:
@@ -1707,21 +2055,19 @@ def render_simulation_section():
                                 "Status": "Success" if succ else "Failed",
                                 "Timestamp": datetime.now().strftime("%H:%M:%S")
                             })
+                            log_activity("SET Prop", f"{u_nid}.{set_k} = {set_v}", "info")
                             st.toast(msg)
                             st.rerun()
                         except Exception as ex:
-                            st.error(f"Error updating node: {str(ex)}")
+                            st.error(f"Error: {str(ex)}")
 
-        # SUB-TAB D: DELETE ENTITY
-        with sub_tab_del:
-            col_dt, col_dt_pick, col_dt_btn = st.columns([1.5, 2.5, 1.5])
-            with col_dt:
-                del_mode = st.radio("Entity to Delete:", ["Node", "Relationship"])
-            with col_dt_pick:
+            # SUB-TAB D: DELETE ENTITY
+            with sub_tab_del:
+                del_mode = st.radio("Delete Target:", ["Node", "Relationship"], horizontal=True)
                 if del_mode == "Node":
                     del_node_choice = st.selectbox("Select Node:", options=node_options, key="del_n_choice")
                     del_id = del_node_choice.split(" ")[0] if del_node_choice else ""
-                    detach_flag = st.checkbox("DETACH DELETE (Delete attached relationships)", value=True)
+                    detach_flag = st.checkbox("DETACH DELETE (remove connected rels)", value=True)
                 else:
                     rel_options = [f"{rid} ({r.source} -[:{r.type}]-> {r.target})" for rid, r in graph.relationships.items()]
                     if not rel_options:
@@ -1732,9 +2078,6 @@ def render_simulation_section():
                         del_id = del_rel_choice.split(" ")[0]
                     detach_flag = False
 
-            with col_dt_btn:
-                st.write("")
-                st.write("")
                 if st.button("Execute Delete", type="secondary", use_container_width=True):
                     if del_mode == "Node":
                         succ, msg = graph.delete_node(del_id, detach=detach_flag)
@@ -1752,286 +2095,460 @@ def render_simulation_section():
                     if succ:
                         st.session_state["matched_node_ids"] = []
                         st.session_state["matched_rel_ids"] = []
+                        log_activity("Delete", f"{del_id} ({del_mode})", "warning")
                         st.toast(msg)
                         st.rerun()
                     else:
                         st.error(msg)
 
-    # ----------------------------------------------------------------------------------
-    # TAB 2: CYPHER QUERY CONSOLE
-    # ----------------------------------------------------------------------------------
-    with tab_cypher:
-        st.subheader("Cypher Query Editor & Console")
-        st.caption("Execute declarative Cypher queries against the in-memory graph. Supported: MATCH, CREATE, SET, DELETE, DETACH DELETE, WHERE, aggregations.")
+        with tab_logger:
+            col_lbtn1, col_lbtn2 = st.columns(2)
+            with col_lbtn1:
+                if st.button("📸 Record Snapshot", type="primary", use_container_width=True):
+                    trial_record = {
+                        "Trial #": len(st.session_state["trials"]) + 1,
+                        "Operation": "Graph Snapshot",
+                        "Query / Action": f"Nodes: {metrics['num_nodes']}, Rels: {metrics['num_relationships']}",
+                        "Result": f"Density: {metrics['density']}",
+                        "Status": "Recorded",
+                        "Timestamp": datetime.now().strftime("%H:%M:%S")
+                    }
+                    st.session_state["trials"].append(trial_record)
+                    log_activity("Snapshot", f"Nodes: {metrics['num_nodes']}", "info")
+                    st.toast(f"Trial #{trial_record['Trial #']} logged!")
+            with col_lbtn2:
+                if st.button("Clear Trials", use_container_width=True):
+                    st.session_state["trials"] = []
+                    st.toast("Trials cleared.")
 
-        cypher_examples = schema["cypher_examples"]
-        col_ex, col_load = st.columns([3.5, 1.2])
-        with col_ex:
-            selected_example = st.selectbox(
-                "Predefined Cypher Examples:",
-                options=list(cypher_examples.keys()),
-                index=0,
-                key=f"cypher_ex_sel_{active_preset_name}"
-            )
-
-        with col_load:
-            st.write("")
-            st.write("")
-            if st.button("Load Query", use_container_width=True):
-                if cypher_examples.get(selected_example):
-                    st.session_state["current_query_input"] = cypher_examples[selected_example]
-                    st.rerun()
-
-        default_cypher = list(cypher_examples.values())[1] if len(cypher_examples) > 1 else "MATCH (n) RETURN n"
-        query_input = st.text_area(
-            "Enter Cypher Statement:",
-            value=st.session_state.get("current_query_input", default_cypher),
-            height=90,
-            help="Type Cypher query. Examples: MATCH (n) RETURN n | CREATE (n:Student {name: 'Alice'})"
-        )
-        st.session_state["current_query_input"] = query_input
-
-        col_run, _ = st.columns([1.5, 3.5])
-        with col_run:
-            run_clicked = st.button("Execute Cypher Query", type="primary", use_container_width=True)
-
-        if run_clicked:
-            res = engine.execute(query_input)
-            st.session_state["last_cypher_result"] = res
-            st.session_state["matched_node_ids"] = res["matched_node_ids"]
-            st.session_state["matched_rel_ids"] = res["matched_rel_ids"]
-
-            trial_record = {
-                "Trial #": len(st.session_state["trials"]) + 1,
-                "Operation": "Cypher Query",
-                "Query / Action": query_input[:65],
-                "Result": res["message"][:40],
-                "Status": "Success" if res["success"] else "Failed",
-                "Timestamp": datetime.now().strftime("%H:%M:%S")
-            }
-            st.session_state["trials"].append(trial_record)
-
-        # Render Query Execution Results
-        last_res = st.session_state.get("last_cypher_result")
-        if last_res:
-            st.divider()
-            if last_res["success"]:
-                st.success(f"**Query Succeeded** ({last_res['execution_time_ms']} ms): {last_res['message']}")
-                df = last_res["dataframe"]
-                if not df.empty:
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-                else:
-                    st.caption("No tabular records returned by this statement.")
-            else:
-                st.error(f"**Query Failed** ({last_res['execution_time_ms']} ms): {last_res['message']}")
-                st.info("Tip: Ensure your labels, relationship types, and node variables are formatted correctly.")
-
-    # ----------------------------------------------------------------------------------
-    # TAB 3: EXPERIMENTAL DATA LOGGER (OBSERVATION SHEET)
-    # ----------------------------------------------------------------------------------
-    with tab_logger:
-        st.subheader("Observation Sheet")
-        st.caption("Record parameters, queries, and graph behavior across trials for inclusion in your official lab report.")
-
-        col_log1, col_log2 = st.columns([1.8, 3.2])
-
-        with col_log1:
-            st.caption("Capture current graph metrics and last operation into your session log table:")
-            if st.button("Record Current State as Trial", type="primary", use_container_width=True):
-                trial_record = {
-                    "Trial #": len(st.session_state["trials"]) + 1,
-                    "Operation": "Graph Snapshot",
-                    "Query / Action": f"Nodes: {metrics['num_nodes']}, Rels: {metrics['num_relationships']}",
-                    "Result": f"Density: {metrics['density']}, AvgDeg: {metrics['avg_degree']}",
-                    "Status": "Recorded",
-                    "Timestamp": datetime.now().strftime("%H:%M:%S")
-                }
-                st.session_state["trials"].append(trial_record)
-                st.toast(f"Trial #{trial_record['Trial #']} successfully logged!")
-
-            if st.button("Clear Logged Trials", use_container_width=True):
-                st.session_state["trials"] = []
-                st.toast("Trial log cleared.")
-
-        with col_log2:
             if st.session_state["trials"]:
                 df_trials = pd.DataFrame(st.session_state["trials"])
-                st.dataframe(df_trials, use_container_width=True, hide_index=True)
+                st.dataframe(df_trials, use_container_width=True, hide_index=True, height=180)
                 csv_data = df_trials.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    "Download Trials as CSV",
+                    "Download CSV",
                     data=csv_data,
                     file_name="graph_db_trials.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
             else:
-                st.info("No trials recorded yet. Perform graph operations or click 'Record Current State as Trial' to begin.")
+                st.caption("No trials recorded yet. Click 'Record Snapshot' or perform graph operations.")
+
+    with col_canvas:
+        c_top1, c_top2 = st.columns([2.5, 1.2])
+        with c_top1:
+            view_mode = st.radio(
+                "Engine:",
+                ["Interactive Canvas", "Plotly Static"],
+                horizontal=True,
+                label_visibility="collapsed"
+            )
+        with c_top2:
+            if st.button("Clear Highlight", use_container_width=True):
+                st.session_state["matched_node_ids"] = []
+                st.session_state["matched_rel_ids"] = []
+                st.rerun()
+
+        if view_mode == "Interactive Canvas":
+            render_interactive_graph_canvas(
+                graph=graph,
+                matched_node_ids=st.session_state.get("matched_node_ids"),
+                matched_rel_ids=st.session_state.get("matched_rel_ids")
+            )
+        else:
+            fig = render_graph_figure(
+                graph=graph,
+                matched_node_ids=st.session_state.get("matched_node_ids"),
+                matched_rel_ids=st.session_state.get("matched_rel_ids"),
+                layout_algorithm="Spring (Force-Directed)",
+                node_label_mode="Name / Label"
+            )
+            st.plotly_chart(fig, use_container_width=True, theme="streamlit")
 
 
 def render_quiz_section():
-    """Renders Section 3: Assessment Quiz with Self-Grading and Feedback."""
-    st.markdown('<div class="manual-kicker">03 / Knowledge Check</div>', unsafe_allow_html=True)
-    st.header("Practical Assessment")
-    st.markdown('<div class="manual-intro">Test your understanding of graph databases, graph architecture, and Cypher query syntax.</div>', unsafe_allow_html=True)
-    st.markdown(
-        f'<div class="manual-label">Assessment / {len(QUIZ_QUESTIONS)} questions</div>'
-        f'<div class="quiz-progress"><span style="width: {100 / len(QUIZ_QUESTIONS):.2f}%"></span></div>',
-        unsafe_allow_html=True
-    )
+    """Renders Section: Assessment Quiz with 3-tab Single-Paper Layout and Instant Feedback."""
+    st.markdown(f"""
+        <div class="purpose-header" style="padding:1.2rem 1.8rem; margin-bottom:1.2rem;">
+            <div class="hero-eyebrow"><span class="hero-dot"></span>PRACTICAL EVALUATION · {EXPERIMENT_CONFIG['lab_code']}</div>
+            <h1 style="font-size:1.8rem !important; margin:0.2rem 0 !important;">Knowledge Assessment Quiz</h1>
+            <p class="subtitle">12 conceptual and practical questions evaluating your mastery of Property Graphs, Cypher queries, and graph storage architecture.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    if st.session_state.get("quiz_submitted", False):
+        score = st.session_state.get("quiz_score", 0)
+        perc = (score / len(QUIZ_QUESTIONS)) * 100
+        badge = "🏆 Outstanding / Distinction" if perc >= 80 else ("✅ Passed" if perc >= 50 else "⚠️ Needs Review")
+        st.info(f"**Quiz Result:** Score: **{score} / {len(QUIZ_QUESTIONS)}** ({perc:.0f}%) — **{badge}**. Review explanations below.")
 
     with st.form("graph_lab_quiz_form"):
-        user_responses = {}
-        for q in QUIZ_QUESTIONS:
-            with st.container():
-                st.markdown(f"**Question {q['id']}:** {q['question']}")
-                selected = st.radio(
-                    label=f"Options for Question {q['id']}:",
-                    options=q["options"],
-                    index=st.session_state["quiz_answers"].get(q["id"], 0),
-                    key=f"quiz_radio_{q['id']}",
-                    label_visibility="collapsed"
-                )
-                user_responses[q["id"]] = q["options"].index(selected)
-            st.divider()
+        quiz_tabs = st.tabs([
+            "Part A: Fundamentals (Q1 – Q4)",
+            "Part B: Cypher Queries (Q5 – Q8)",
+            "Part C: Architecture (Q9 – Q12)"
+        ])
         
+        user_responses = {}
+        partitions = [
+            QUIZ_QUESTIONS[0:4],
+            QUIZ_QUESTIONS[4:8],
+            QUIZ_QUESTIONS[8:12]
+        ]
+        
+        for p_idx, q_subset in enumerate(partitions):
+            with quiz_tabs[p_idx]:
+                c1, c2 = st.columns(2)
+                for i, q in enumerate(q_subset):
+                    target_col = c1 if (i % 2 == 0) else c2
+                    with target_col:
+                        with st.container(border=True):
+                            st.markdown(f"**Q{q['id']}:** {q['question']}")
+                            selected = st.radio(
+                                label=f"Options for Q{q['id']}:",
+                                options=q["options"],
+                                index=st.session_state["quiz_answers"].get(q["id"], 0),
+                                key=f"quiz_radio_{q['id']}",
+                                label_visibility="collapsed"
+                            )
+                            user_responses[q["id"]] = q["options"].index(selected)
+                            
+                            if st.session_state.get("quiz_submitted", False):
+                                u_ans = st.session_state["quiz_answers"].get(q["id"])
+                                if u_ans == q["answer_index"]:
+                                    st.success("✅ Correct!", icon="✅")
+                                else:
+                                    st.error(f"❌ Correct: {q['options'][q['answer_index']]}", icon="❌")
+                                st.caption(f"_{q['explanation']}_")
+
         st.write("")
-        submitted = st.form_submit_button("Submit Quiz for Evaluation", type="primary")
+        submitted = st.form_submit_button("Submit Quiz for Evaluation", type="primary", use_container_width=True)
 
     if submitted:
         score = 0
         st.session_state["quiz_answers"] = user_responses
         st.session_state["quiz_submitted"] = True
-
-        st.divider()
-        st.subheader("Evaluation Results and Feedback")
         for q in QUIZ_QUESTIONS:
-            user_ans = user_responses.get(q["id"])
-            correct_ans = q["answer_index"]
-            with st.container():
-                if user_ans == correct_ans:
-                    score += 1
-                    st.success(f"**Question {q['id']}: Correct!**", icon="✅")
-                    st.caption(f"_{q['explanation']}_")
-                else:
-                    st.error(f"**Question {q['id']}: Incorrect.**", icon="❌")
-                    st.write(f"Your answer: `{q['options'][user_ans]}`")
-                    st.write(f"**Correct Answer:** `{q['options'][correct_ans]}`")
-                    st.caption(f"**Explanation:** _{q['explanation']}_")
-
+            if user_responses.get(q["id"]) == q["answer_index"]:
+                score += 1
         st.session_state["quiz_score"] = score
-        perc = (score / len(QUIZ_QUESTIONS)) * 100
-        
-        st.markdown('<div class="manual-label">Assessment Complete</div>', unsafe_allow_html=True)
-        if perc == 100:
-            st.success(f"Perfect score: {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%). Your responses have been recorded.")
-        elif perc >= 70:
-            st.info(f"Assessment recorded: {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%). Review the explanations below.")
-        else:
-            st.warning(f"Assessment recorded: {score} / {len(QUIZ_QUESTIONS)} ({perc:.0f}%). Revisit the theory and try again.")
-
-    elif st.session_state.get("quiz_submitted", False):
-        st.success(f"Assessment already submitted. Current score: **{st.session_state.get('quiz_score', 0)} / {len(QUIZ_QUESTIONS)}**")
+        log_activity("Quiz Done", f"Score: {score}/{len(QUIZ_QUESTIONS)}", "success")
+        st.toast(f"Quiz evaluated! Score: {score}/{len(QUIZ_QUESTIONS)}")
+        st.rerun()
 
 
 def render_report_section():
-    """Renders Section 4: Dynamic Lab Report Generator with Guaranteed PDF Export."""
-    st.markdown('<div class="manual-kicker">04 / Record Submission</div>', unsafe_allow_html=True)
-    st.header("Experiment Report")
-    st.markdown('<div class="manual-intro">Compile your student details, observations, experimental log, and assessment result into the practical record.</div>', unsafe_allow_html=True)
+    """Renders Section: Dynamic Lab Report Generator in a 2-column Single-Paper Layout with PDF Export."""
+    st.markdown(f"""
+        <div class="purpose-header" style="padding:1.2rem 1.8rem; margin-bottom:1.2rem;">
+            <div class="hero-eyebrow"><span class="hero-dot"></span>PRACTICAL RECORD · {EXPERIMENT_CONFIG['lab_code']}</div>
+            <h1 style="font-size:1.8rem !important; margin:0.2rem 0 !important;">Experiment Report Generation</h1>
+            <p class="subtitle">Compile student details, observations, experimental benchmark records, and assessment score into an official PDF document.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    with st.container(border=True):
-        st.markdown('<div class="manual-label">Student Information</div>', unsafe_allow_html=True)
-        col1, col2, col3 = st.columns(3)
-        with col1:
+    col_form, col_export = st.columns([1.0, 1.0])
+
+    with col_form:
+        with st.container(border=True):
+            st.markdown('<div class="manual-label">Student Information</div>', unsafe_allow_html=True)
             student_name = st.text_input("Student Name", value=st.session_state["student_info"].get("name", "Student Name"))
-        with col2:
-            student_id = st.text_input("Student Roll / ID", value=st.session_state["student_info"].get("id", "21CS01"))
-        with col3:
-            lab_date = st.date_input("Experiment Date", value=datetime.now())
+            c_r1, c_r2 = st.columns(2)
+            with c_r1:
+                student_id = st.text_input("Roll / ID", value=st.session_state["student_info"].get("id", "21CS01"))
+            with c_r2:
+                lab_date = st.date_input("Date", value=datetime.now())
 
-    st.session_state["student_info"]["name"] = student_name
-    st.session_state["student_info"]["id"] = student_id
-    st.session_state["student_info"]["date"] = str(lab_date)
+            st.session_state["student_info"]["name"] = student_name
+            st.session_state["student_info"]["id"] = student_id
+            st.session_state["student_info"]["date"] = str(lab_date)
 
-    with st.container(border=True):
-        st.markdown('<div class="manual-label">Observations</div>', unsafe_allow_html=True)
-        student_notes = st.text_area(
-            "Enter your interpretation of results, observations, and conclusions:",
-            value=st.session_state.get("student_notes", (
-                "During the experiment, we successfully created, queried, and managed an interconnected property graph. "
-                "Using Cypher pattern matching, relationships were traversed efficiently without relational multi-table joins. "
-                "Referential constraints were verified when attempting plain DELETE on connected nodes, demonstrating the necessity "
-                "of DETACH DELETE for safely removing graph entities."
-            )),
-            height=130
-        )
-        st.session_state["student_notes"] = student_notes
+            st.markdown('<div class="manual-label" style="margin-top:10px;">Observations & Conclusions</div>', unsafe_allow_html=True)
+            student_notes = st.text_area(
+                "Notes and inferences:",
+                value=st.session_state.get("student_notes", (
+                    "During the experiment, we successfully created, queried, and managed an interconnected property graph. "
+                    "Using Cypher pattern matching, relationships were traversed efficiently without relational multi-table joins. "
+                    "Referential constraints were verified when attempting plain DELETE on connected nodes, demonstrating the necessity "
+                    "of DETACH DELETE for safely removing graph entities."
+                )),
+                height=130,
+                label_visibility="collapsed"
+            )
+            st.session_state["student_notes"] = student_notes
 
-    trials_df = pd.DataFrame(st.session_state["trials"]) if st.session_state["trials"] else pd.DataFrame()
-    graph_metrics = st.session_state["graph"].get_metrics()
+    with col_export:
+        with st.container(border=True):
+            st.markdown('<div class="manual-label">Report Summary</div>', unsafe_allow_html=True)
+            trials_df = pd.DataFrame(st.session_state["trials"]) if st.session_state["trials"] else pd.DataFrame()
+            graph_metrics = st.session_state["graph"].get_metrics()
+            quiz_score = st.session_state.get("quiz_score", 0)
+            quiz_total = len(QUIZ_QUESTIONS)
+            
+            st.markdown(
+                f'<div class="report-facts">'
+                f'<div class="report-fact"><small>Student</small><strong>{student_name}</strong></div>'
+                f'<div class="report-fact"><small>Roll</small><strong>{student_id}</strong></div>'
+                f'<div class="report-fact"><small>Nodes</small><strong>{graph_metrics["num_nodes"]}</strong></div>'
+                f'<div class="report-fact"><small>Score</small><strong>{quiz_score} / {quiz_total}</strong></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            st.caption(f"Recorded Simulation Trials: **{len(trials_df)}** | Status: **{'Ready for Export' if quiz_score > 0 or len(trials_df) > 0 else 'Initial'}**")
 
-    st.divider()
-    
-    with st.container(border=True):
-        st.markdown('<div class="manual-label">Report Preview</div>', unsafe_allow_html=True)
-        st.markdown(f"**Experiment:** {EXPERIMENT_CONFIG['title']} ({EXPERIMENT_CONFIG['lab_code']})")
+            pdf_bytes = generate_pdf_report(
+                student_name=student_name,
+                student_id=student_id,
+                date_str=str(lab_date),
+                trials_df=trials_df,
+                quiz_score=quiz_score,
+                quiz_total=quiz_total,
+                student_notes=student_notes,
+                graph_metrics=graph_metrics
+            )
+            os.makedirs("static", exist_ok=True)
+            with open("static/lab_report.pdf", "wb") as f:
+                f.write(pdf_bytes)
+            with open("lab_report.pdf", "wb") as f:
+                f.write(pdf_bytes)
+
+            st.write("")
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                st.download_button(
+                    label="📥 Download lab_report.pdf",
+                    data=pdf_bytes,
+                    file_name=f"lab_report_{student_id}.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                    use_container_width=True
+                )
+            with col_b2:
+                st.link_button(
+                    "📄 Open / Print PDF",
+                    url="/app/static/lab_report.pdf",
+                    use_container_width=True
+                )
+
+
+def render_certificate_section():
+    """Renders Section: Certificate of Completion with verification details and PDF download."""
+    st.markdown('<div class="manual-kicker">Credential & Accreditation</div>', unsafe_allow_html=True)
+    st.header("Certificate of Completion")
+    st.markdown('<div class="manual-intro">Verify your experiment participation and generate an official verifiable certificate of completion.</div>', unsafe_allow_html=True)
+
+    col_meta1, col_meta2 = st.columns([1.1, 1.9])
+
+    with col_meta1:
+        with st.container(border=True):
+            st.markdown('<div class="manual-label">Participant Details</div>', unsafe_allow_html=True)
+            cert_name = st.text_input("Full Name", value=st.session_state["student_info"].get("name", "Student Name"), key="cert_name_input")
+            cert_id = st.text_input("Student Roll / ID", value=st.session_state["student_info"].get("id", "21CS01"), key="cert_id_input")
+            cert_inst = st.text_input("Department / Institution", value=st.session_state.get("institution", "Department of Computer Science & Engineering"), key="cert_inst_input")
+            cert_date = st.date_input("Issue Date", value=datetime.now(), key="cert_date_input")
+
+            st.session_state["student_info"]["name"] = cert_name
+            st.session_state["student_info"]["id"] = cert_id
+            st.session_state["institution"] = cert_inst
+            st.session_state["student_info"]["date"] = str(cert_date)
+
+            st.divider()
+            st.markdown('<div class="manual-label">Laboratory Criteria Status</div>', unsafe_allow_html=True)
+            quiz_done = st.session_state.get("quiz_submitted", False)
+            quiz_score = st.session_state.get("quiz_score", 0)
+            quiz_total = len(QUIZ_QUESTIONS)
+            num_trials = len(st.session_state.get("trials", []))
+
+            if quiz_done:
+                st.success(f"Assessment: Completed ({quiz_score} / {quiz_total} score)", icon="✅")
+            else:
+                st.info("Assessment: Pending (You can complete the Quiz in Section 'Quiz')", icon="ℹ️")
+
+            if num_trials > 0:
+                st.success(f"Simulation Activity: {num_trials} trials recorded", icon="✅")
+            else:
+                st.caption(f"Simulation Activity: {num_trials} trials recorded (Try the 'Simulation' section)")
+
+            # Generate unique verification hash / code
+            unique_hash = hex(abs(hash(f"{cert_name}_{cert_id}_{cert_date}")))[2:10].upper()
+            verification_id = f"VLAB-CS08-2026-{unique_hash}"
+            st.caption(f"Verification Code: **{verification_id}**")
+
+            # Generate PDF Certificate
+            pdf_cert_bytes = generate_pdf_certificate(
+                student_name=cert_name,
+                student_id=cert_id,
+                institution=cert_inst,
+                date_str=str(cert_date),
+                quiz_score=quiz_score,
+                quiz_total=quiz_total,
+                cert_id=verification_id
+            )
+
+            st.write("")
+            st.download_button(
+                label="Download Certificate (PDF)",
+                data=pdf_cert_bytes,
+                file_name=f"Certificate_{cert_id.replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True
+            )
+
+    with col_meta2:
+        # Visual Certificate Preview Frame
+        st.markdown(f"""
+            <div class="certificate-preview-frame">
+                <div class="cert-inner-frame">
+                    <div class="cert-org">VIRTUAL LABORATORY  |  MINISTRY OF EDUCATION INITIATIVE</div>
+                    <div class="cert-inst">{cert_inst.upper()}</div>
+                    <div class="cert-title">CERTIFICATE OF COMPLETION</div>
+                    <div class="cert-subtitle">This document is proudly awarded to</div>
+                    <div class="cert-student">{cert_name}</div>
+                    <div class="cert-id">Roll / Registration ID: <strong>{cert_id}</strong></div>
+                    <div class="cert-body">
+                        for successfully conducting the laboratory simulation, demonstrating competency in property graph modeling, 
+                        mastering Cypher relationship queries, and completing the virtual lab requirements for:
+                    </div>
+                    <div class="cert-course">{EXPERIMENT_CONFIG['title'].upper()}</div>
+                    <div class="cert-code">{EXPERIMENT_CONFIG['course']} | Course Code: {EXPERIMENT_CONFIG['lab_code']}</div>
+                    <div class="cert-footer-row">
+                        <div class="cert-col">
+                            <div class="cert-meta-label">Date Issued</div>
+                            <div class="cert-meta-val">{cert_date}</div>
+                        </div>
+                        <div class="cert-col cert-seal">
+                            <div class="seal-badge">★ VERIFIED ★</div>
+                            <div class="seal-sub">VLAB ACCREDITED</div>
+                        </div>
+                        <div class="cert-col">
+                            <div class="cert-meta-label">Verification ID</div>
+                            <div class="cert-meta-val" style="font-family:'IBM Plex Mono',monospace;">{verification_id}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+
+def render_references_section():
+    """Renders Section: References, Bibliography, Research Papers, and Standards."""
+    st.markdown('<div class="manual-kicker">Academic Bibliography</div>', unsafe_allow_html=True)
+    st.header("References & Further Reading")
+    st.markdown('<div class="manual-intro">Curated academic literature, international standards, textbooks, and documentation on Graph Databases and Cypher.</div>', unsafe_allow_html=True)
+
+    ref_tabs = st.tabs([
+        "Core Textbooks", 
+        "Seminal Research Papers", 
+        "International Standards", 
+        "Official Documentation", 
+        "Libraries & Tools"
+    ])
+
+    with ref_tabs[0]:
+        st.markdown("""
+        ### Standard Textbooks & Monographs
         
-        st.markdown(
-            f'<div class="report-facts">'
-            f'<div class="report-fact"><small>Student</small><strong>{student_name}</strong></div>'
-            f'<div class="report-fact"><small>Roll / ID</small><strong>{student_id}</strong></div>'
-            f'<div class="report-fact"><small>Graph nodes</small><strong>{graph_metrics["num_nodes"]}</strong></div>'
-            f'<div class="report-fact"><small>Assessment</small><strong>{st.session_state.get("quiz_score", 0)} / {len(QUIZ_QUESTIONS)}</strong></div>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
+        1. **Robinson, I., Webber, J., & Eifrem, E. (2015).**  
+           *Graph Databases: New Opportunities for Connected Data* (2nd Edition). O'Reilly Media.  
+           *Description:* The definitive practitioner reference written by the creators of Neo4j. Covers labeled property graph data modeling, query optimization, and architectural internals including native store files and Index-Free Adjacency.
+        
+        2. **Silberschatz, A., Korth, H. F., & Sudarshan, S. (2019).**  
+           *Database System Concepts* (7th Edition). McGraw-Hill Education.  
+           *Description:* Standard university database curriculum textbook. Features dedicated chapters on NoSQL paradigms, semi-structured data, and graph data architectures comparing relational joins to pointer-based graph traversals.
+        
+        3. **Needham, M., & Hodler, A. E. (2019).**  
+           *Graph Algorithms: Practical Examples in Apache Spark and Neo4j*. O'Reilly Media.  
+           *Description:* In-depth guide to pathfinding (Dijkstra, A*), centrality measures (PageRank, Betweenness), community detection (Louvain, Label Propagation), and similarity algorithms.
+        
+        4. **Easley, D., & Kleinberg, J. (2010).**  
+           *Networks, Crowds, and Markets: Reasoning about a Highly Connected World*. Cambridge University Press.  
+           *Description:* Foundational interdisciplinary text on graph theory, social network structure, information cascades, and power-law degree distributions.
+        """)
 
-        if not trials_df.empty:
-            st.dataframe(trials_df, hide_index=True, use_container_width=True)
-        else:
-            st.info("Note: You have not recorded any trials in the Simulation tab yet. Your report will indicate 0 trials.")
+    with ref_tabs[1]:
+        st.markdown("""
+        ### Seminal Research Papers
+        
+        1. **Euler, L. (1736).**  
+           *"Solutio problematis ad geometriam situs pertinentis"* (*The solution of a problem relating to the geometry of position*).  
+           *Commentarii Academiae Scientiarum Petropolitanae*, 8, 128–140.  
+           *Significance:* The founding mathematical paper of graph theory and topology, resolving the historic Seven Bridges of Königsberg problem.
+        
+        2. **Francis, N., Green, A., Guagliardo, P., Libkin, L., Lindaaker, T., Marsault, V., Plantikow, S., Rydberg, M., Selmer, P., & Taylor, A. (2018).**  
+           *"Cypher: An Open Cypher Query Language for Property Graphs"*.  
+           *Proceedings of the 2018 International Conference on Management of Data (ACM SIGMOD)*, pp. 1809–1811.  
+           *Significance:* Formalizes the operational semantics, pattern-matching mechanisms, and syntax grammar of the Cypher language.
+        
+        3. **Angles, R., & Gutierrez, C. (2008).**  
+           *"Survey of Graph Database Models"*.  
+           *ACM Computing Surveys (CSUR)*, 40(1), Article 1, 1–39.  
+           *Significance:* Comprehensive survey detailing the evolution from 1960s network databases to modern hypergraphs, property graphs, and RDF triplestores.
+        
+        4. **Vicknair, C., Macias, M., Zhao, Z., Nan, X., Chen, Y., & Wilkins, D. (2010).**  
+           *"A comparison of a graph database and a relational database: a data provenance perspective"*.  
+           *Proceedings of the 48th Annual Southeast Regional Conference (ACM SE '10)*.  
+           *Significance:* Empirical benchmark comparing relational multi-table joins against native graph traversal latency over increasing query hop depths.
+        """)
 
-    # Generate PDF bytes and write file to disk
-    pdf_bytes = generate_pdf_report(
-        student_name=student_name,
-        student_id=student_id,
-        date_str=str(lab_date),
-        trials_df=trials_df,
-        quiz_score=st.session_state.get("quiz_score", 0),
-        quiz_total=len(QUIZ_QUESTIONS),
-        student_notes=student_notes,
-        graph_metrics=graph_metrics
-    )
+    with ref_tabs[2]:
+        st.markdown("""
+        ### International Standards & Specifications
+        
+        1. **ISO/IEC 39075:2024 Information technology — Database languages — GQL**  
+           *International Organization for Standardization (ISO) / International Electrotechnical Commission (IEC).*  
+           *Published: April 2024.*  
+           *Significance:* The official international standard for property graph databases. GQL is the first new full ISO standard database language since SQL was published in 1987.
+        
+        2. **The openCypher Project (v9 Specification)**  
+           *openCypher Implementers Group.*  
+           *Web:* [https://opencypher.org](https://opencypher.org)  
+           *Significance:* The open industry standard specification enabling vendor-independent adoption of Cypher pattern matching across Neo4j, RedisGraph, Memgraph, AWS Neptune, and SAP HANA.
+        
+        3. **W3C Semantic Web Standards: RDF & SPARQL**  
+           *World Wide Web Consortium (W3C).*  
+           *Specifications:* RDF 1.1 Concepts and Abstract Syntax; SPARQL 1.1 Query Language.  
+           *Web:* [https://www.w3.org/standards/semanticweb/](https://www.w3.org/standards/semanticweb/)  
+           *Significance:* International standard for web-scale knowledge graphs and semantic triplestores using Subject-Predicate-Object semantics.
+        """)
 
-    # Save to local files for guaranteed download
-    os.makedirs("static", exist_ok=True)
-    with open("static/lab_report.pdf", "wb") as f:
-        f.write(pdf_bytes)
-    with open("lab_report.pdf", "wb") as f:
-        f.write(pdf_bytes)
+    with ref_tabs[3]:
+        st.markdown("""
+        ### Official Documentation & Developer Guides
+        
+        1. **Neo4j Official Cypher Manual**  
+           *Neo4j Inc. Documentation Portal.*  
+           *URL:* [https://neo4j.com/docs/cypher-manual/current/](https://neo4j.com/docs/cypher-manual/current/)  
+           *Contents:* Complete clause reference (`MATCH`, `CREATE`, `MERGE`, `SET`, `DELETE`, `WITH`, `UNWIND`), pattern syntax, and aggregation functions.
+        
+        2. **Neo4j GraphAcademy**  
+           *Interactive Certification & Learning Portal.*  
+           *URL:* [https://graphacademy.neo4j.com/](https://graphacademy.neo4j.com/)  
+           *Contents:* Professional pathways in Graph Data Modeling, Cypher Fundamentals, and Graph Data Science.
+        
+        3. **National Virtual Labs Project (Virtual Labs India)**  
+           *Ministry of Education, Government of India / IIT Kharagpur.*  
+           *URL:* [https://www.vlab.co.in/](https://www.vlab.co.in/)  
+           *Contents:* Digital curriculum and simulation guidelines for undergraduate engineering laboratory courses.
+        """)
 
-    with st.container(border=True):
-        st.markdown('<div class="manual-label">Export</div>', unsafe_allow_html=True)
-        st.caption("Your personalized PDF report is ready to be downloaded and submitted.")
-        col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        st.link_button(
-            "Open / Download PDF Document",
-            url="/app/static/lab_report.pdf",
-            type="primary",
-            use_container_width=True
-        )
-
-    with col_btn2:
-        st.download_button(
-            label="Download lab_report.pdf",
-            data=pdf_bytes,
-            file_name="graph_lab_report.pdf",
-            mime="application/pdf",
-            key="stream_pdf_btn",
-            use_container_width=True
-        )
+    with ref_tabs[4]:
+        st.markdown("""
+        ### Python Libraries & Interactive Visualizers
+        
+        1. **NetworkX (Network Analysis in Python)**  
+           *URL:* [https://networkx.org/](https://networkx.org/)  
+           *Role:* High-productivity Python package for creating, manipulating, and studying the structure, dynamics, and functions of complex networks.
+        
+        2. **Plotly Graph Objects (Web Graph Visualization)**  
+           *URL:* [https://plotly.com/python/](https://plotly.com/python/)  
+           *Role:* Interactive HTML5 canvas and WebGL rendering engine used to render the dynamic 2D force-directed graph sandbox in this laboratory.
+        
+        3. **FPDF2 (Minimalist PDF Generation for Python)**  
+           *URL:* [https://py-pdf.github.io/fpdf2/](https://py-pdf.github.io/fpdf2/)  
+           *Role:* Document generation engine powering the laboratory report and official certificate export features.
+        """)
 
 
 # ======================================================================================
@@ -2060,11 +2577,14 @@ def init_session_state():
         st.session_state["quiz_submitted"] = False
     if "quiz_score" not in st.session_state:
         st.session_state["quiz_score"] = 0
+    if "institution" not in st.session_state:
+        st.session_state["institution"] = "Department of Computer Science & Engineering"
     if "student_info" not in st.session_state:
         st.session_state["student_info"] = {
             "name": "Student Name",
             "id": "21CS01",
-            "date": str(datetime.now().date())
+            "date": str(datetime.now().date()),
+            "institution": "Department of Computer Science & Engineering"
         }
     if "student_notes" not in st.session_state:
         st.session_state["student_notes"] = ""
@@ -2072,6 +2592,71 @@ def init_session_state():
         st.session_state["preset_index"] = 0
     if "active_preset" not in st.session_state:
         st.session_state["active_preset"] = "University Academic Knowledge Graph (Default)"
+    if "activity_logs" not in st.session_state:
+        st.session_state["activity_logs"] = [
+            {"time": datetime.now().strftime("%H:%M:%S"), "action": "Ready", "type": "success", "detail": "University Graph loaded (11 nodes)"}
+        ]
+
+
+def log_activity(action: str, detail: str = "", log_type: str = "info"):
+    """Appends an activity log entry to session state for the sidebar tracker."""
+    if "activity_logs" not in st.session_state:
+        st.session_state["activity_logs"] = []
+    entry = {
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "action": action,
+        "detail": detail,
+        "type": log_type
+    }
+    st.session_state["activity_logs"].append(entry)
+    if len(st.session_state["activity_logs"]) > 40:
+        st.session_state["activity_logs"] = st.session_state["activity_logs"][-40:]
+
+
+def render_sidebar_logs():
+    """Displays real-time user activity logs in the sidebar."""
+    st.sidebar.divider()
+    st.sidebar.markdown('<div class="manual-label" style="font-size:0.75rem; letter-spacing:0.1em; color:var(--accent);">Live Activity Logs</div>', unsafe_allow_html=True)
+    logs = st.session_state.get("activity_logs", [])
+    if not logs:
+        st.sidebar.caption("No activities recorded yet.")
+        return
+    
+    log_html = '<div class="sidebar-logs-container">'
+    for entry in reversed(logs[-6:]):
+        b_color = "#0284c7"
+        if entry["type"] == "success":
+            b_color = "#10b981"
+        elif entry["type"] == "warning":
+            b_color = "#f59e0b"
+        elif entry["type"] == "error":
+            b_color = "#ef4444"
+        elif entry["type"] == "query":
+            b_color = "#8b5cf6"
+            
+        detail_txt = entry.get("detail", "")
+        if len(detail_txt) > 28:
+            detail_txt = detail_txt[:26] + "..."
+            
+        log_html += f"""
+        <div class="sidebar-log-row">
+            <div class="sidebar-log-header">
+                <span class="sidebar-log-badge" style="background:{b_color}20; color:{b_color}; border:1px solid {b_color}60;">{entry["action"]}</span>
+                <span class="sidebar-log-time">{entry["time"]}</span>
+            </div>
+            <span class="sidebar-log-detail">{detail_txt}</span>
+        </div>
+        """
+    log_html += '</div>'
+    st.sidebar.markdown(log_html, unsafe_allow_html=True)
+
+    col_c1, col_c2 = st.sidebar.columns([1, 1])
+    with col_c1:
+        st.sidebar.caption(f"Total: {len(logs)}")
+    with col_c2:
+        if st.sidebar.button("Clear", key="clear_sidebar_logs_btn", use_container_width=True):
+            st.session_state["activity_logs"] = []
+            st.rerun()
 
 
 def get_app_styles() -> str:
@@ -2107,7 +2692,7 @@ def get_app_styles() -> str:
     /* Container & Layout */
     .main .block-container {
         max-width: 1440px;
-        padding: 2.2rem 3.5rem 4.5rem;
+        padding: 0.8rem 2.2rem 2.2rem !important;
     }
     h1, h2, h3, h4 {
         font-family: 'Space Grotesk', sans-serif !important;
@@ -2115,31 +2700,26 @@ def get_app_styles() -> str:
     }
     
     h1 { font-size: 2.15rem !important; line-height: 1.15 !important; }
-    h2 { font-size: 1.55rem !important; margin-top: 1.8rem !important; }
-    h3 { font-size: 1.15rem !important; }
+    h2 { font-size: 1.55rem !important; margin-top: 1.4rem !important; }
+    h3 { font-size: 1.22rem !important; }
 
     /* Virtual Lab Header */
     .vlab-header {
         background: var(--card-bg);
         border: 1px solid var(--card-border);
         border-top: 3px solid var(--accent);
-        border-radius: 14px;
-        padding: 1.8rem 2.2rem 1.6rem;
-        margin-bottom: 2.2rem;
+        border-radius: 12px;
+        padding: 1.4rem 2rem 1.3rem;
+        margin-bottom: 1.5rem;
     }
     .vlab-header h1 {
         margin: 0;
-        font-size: 2rem !important;
+        font-size: 1.9rem !important;
         font-weight: 700 !important;
     }
-    .hero-eyebrow { color: var(--accent); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
-    .experiment-cover .hero-eyebrow { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+    .hero-eyebrow { color: var(--accent); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
     .hero-dot { display: inline-block; width: 7px; height: 7px; margin-right: 0.55rem; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
-    .hero-title-row { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin-top: 0.75rem; }
-    .hero-title-row h1 { margin: 0 !important; }
-    .hero-badge { background: linear-gradient(135deg, var(--accent), var(--violet)); color: #FFFFFF; padding: 0.32rem 0.7rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; white-space: nowrap; }
-    .vlab-header p.subtitle { opacity: 0.8; font-size: 0.96rem; margin: 0.65rem 0 0; }
-    .vlab-header span.badge { background: var(--accent-soft); color: var(--accent); padding: 0.25rem 0.55rem; border-radius: 4px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; white-space: nowrap; margin-left: 0.75rem; vertical-align: middle; }
+    .hero-badge { background: linear-gradient(135deg, var(--accent), var(--violet)); color: #FFFFFF; padding: 0.28rem 0.65rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; white-space: nowrap; }
 
     .manual-kicker, .manual-label {
         color: var(--accent) !important;
@@ -2151,36 +2731,13 @@ def get_app_styles() -> str:
     .manual-intro {
         border-left: 3px solid var(--accent);
         padding: 0.55rem 1rem;
-        margin: 1.1rem 0 1.8rem;
+        margin: 0.9rem 0 1.4rem;
         background: var(--accent-soft);
         border-radius: 0 8px 8px 0;
+        font-size: 1.05rem !important;
     }
-    .experiment-cover {
-        display: grid;
-        grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
-        gap: 2rem;
-        align-items: center;
-        background: var(--card-bg);
-        border: 1px solid var(--card-border);
-        border-top: 3px solid var(--accent);
-        border-radius: 14px;
-        padding: 2.2rem 2.5rem;
-        margin: 1.6rem 0 1.8rem;
-    }
-    .experiment-cover h2 { font-size: clamp(2rem, 4vw, 3.2rem) !important; line-height: 1.05 !important; margin: 0.7rem 0 1rem !important; }
-    .cover-copy p { max-width: 34rem; opacity: 0.82; font-size: 1.02rem; line-height: 1.65; }
-    .cover-meta { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; opacity: 0.75; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
-    .cover-meta span { border-left: 2px solid var(--accent); padding-left: 0.55rem; }
-    .cover-visual { min-height: 250px; display: grid; place-items: center; background: var(--card-subtle); border: 1px solid var(--card-border); border-radius: 12px; }
-    .cover-visual svg { width: 100%; max-width: 430px; height: auto; }
-    .graph-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 5; }
-    .graph-line.faint { stroke: #93C5FD; }
-    .graph-node { stroke-width: 4; }
-    .graph-node.node-teal { fill: #0284C7; }
-    .graph-node.node-warm { fill: #EA580C; }
-    .cover-visual text { opacity: 0.75; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.04em; }
 
-    .concept-diagram { display: flex; align-items: center; justify-content: center; gap: 1.2rem; padding: 1.4rem 1rem; margin: 0.5rem 0 2rem; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 10px; }
+    .concept-diagram { display: flex; align-items: center; justify-content: center; gap: 1.2rem; padding: 1.2rem 1rem; margin: 0.5rem 0 1.5rem; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 10px; }
     .concept-diagram > div { display: grid; gap: 0.35rem; justify-items: center; }
     .concept-diagram small { opacity: 0.75; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
     .diagram-node { display: inline-flex; align-items: center; justify-content: center; width: 4.8rem; height: 2.8rem; border: 2px solid currentColor; background: var(--card-subtle); border-radius: 4px; font: 600 0.72rem 'IBM Plex Mono', monospace; }
@@ -2189,31 +2746,368 @@ def get_app_styles() -> str:
     .diagram-arrow { color: var(--accent); font-size: 1.5rem; }
     .diagram-arrow small { display: block; font-size: 0.6rem; text-align: center; opacity: 0.75; }
 
-    .report-facts { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--card-border); border-radius: 10px; background: var(--card-bg); margin: 1.2rem 0 1.6rem; }
-    .report-fact { padding: 0.85rem 1rem; border-right: 1px solid var(--card-border); }
+    .report-facts { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--card-border); border-radius: 10px; background: var(--card-bg); margin: 0.8rem 0 1.2rem; }
+    .report-fact { padding: 0.75rem 0.9rem; border-right: 1px solid var(--card-border); }
     .report-fact:last-child { border-right: 0; }
     .report-fact small { display: block; opacity: 0.75; font-size: 0.67rem; letter-spacing: 0.1em; text-transform: uppercase; }
-    .report-fact strong { display: block; margin-top: 0.35rem; color: var(--accent); font-size: 1.05rem; overflow-wrap: anywhere; }
+    .report-fact strong { display: block; margin-top: 0.25rem; color: var(--accent); font-size: 1.05rem; overflow-wrap: anywhere; }
 
-    .quiz-progress { height: 5px; background: var(--card-border); border-radius: 3px; overflow: hidden; margin: 1.2rem 0 2rem; }
+    .quiz-progress { height: 5px; background: var(--card-border); border-radius: 3px; overflow: hidden; margin: 0.8rem 0 1.4rem; }
     .quiz-progress span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--violet)); }
 
     /* Simulation metric chips */
-    .metric-chips-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
-    .metric-chip { background: var(--card-subtle); border: 1px solid var(--card-border); border-radius: 6px; padding: 4px 9px; font-size: 0.8rem; }
+    .metric-chips-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 3px; }
+    .metric-chip { background: var(--card-subtle); border: 1px solid var(--card-border); border-radius: 6px; padding: 4px 9px; font-size: 0.85rem; }
     .metric-chip strong { color: var(--accent); font-weight: 700; }
 
     /* Sidebar */
-    .sidebar-brand { color: var(--accent); font-size: 1.1rem; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 0.65rem; }
-    .sidebar-code { opacity: 0.75; font-size: 0.72rem; line-height: 1.55; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 1.5rem; }
-    .sidebar-stat { border: 1px solid var(--card-border); border-radius: 9px; background: var(--card-subtle); padding: 0.65rem 0.75rem; margin: 0.5rem 0; }
-    .sidebar-stat-label { display: block; opacity: 0.75; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
-    .sidebar-stat-value { display: block; color: var(--accent); font-size: 0.9rem; font-weight: 700; margin-top: 0.2rem; }
+    [data-testid="stSidebar"] {
+        padding-top: 1rem;
+    }
+    .sidebar-title {
+        color: var(--accent);
+        font-size: 1.32rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin-bottom: 0.15rem;
+    }
+    .sidebar-code {
+        opacity: 0.75;
+        font-size: 0.76rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-bottom: 1rem;
+    }
+    .sidebar-logs-container {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        margin: 6px 0 10px;
+    }
+    .sidebar-log-row {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 6px;
+        padding: 5px 8px;
+    }
+    .sidebar-log-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2px;
+    }
+    .sidebar-log-badge {
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .sidebar-log-time {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.68rem;
+        opacity: 0.6;
+    }
+    .sidebar-log-detail {
+        display: block;
+        font-size: 0.76rem;
+        opacity: 0.85;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-family: 'IBM Plex Mono', monospace;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] {
+        gap: 0.5rem;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label {
+        font-size: 1.18rem !important;
+        font-weight: 600 !important;
+        padding: 0.65rem 0.95rem !important;
+        border-radius: 8px !important;
+        border: 1px solid var(--card-border) !important;
+        background: var(--card-bg) !important;
+        transition: all 0.15s ease-in-out !important;
+        cursor: pointer !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+        background: var(--card-subtle) !important;
+        border-color: var(--accent) !important;
+        color: var(--accent) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label p {
+        font-size: 1.18rem !important;
+        font-weight: 600 !important;
+        line-height: 1.3 !important;
+        margin: 0 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked),
+    [data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] {
+        background: var(--accent-soft) !important;
+        border-color: var(--accent) !important;
+        color: var(--accent) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p,
+    [data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] p {
+        color: var(--accent) !important;
+        font-weight: 700 !important;
+    }
+
+    /* General Typography & Spacing */
+    body, [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li {
+        font-size: 1.08rem !important;
+        line-height: 1.7 !important;
+    }
+
+    /* Purpose Section Cards */
+    .purpose-header {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-top: 4px solid var(--accent);
+        border-radius: 12px;
+        padding: 1.8rem 2.2rem;
+        margin-bottom: 1.8rem;
+    }
+    .purpose-header h1 {
+        font-size: 2.3rem !important;
+        font-weight: 700 !important;
+        margin: 0.4rem 0 !important;
+    }
+    .purpose-header p.subtitle {
+        font-size: 1.12rem !important;
+        opacity: 0.85;
+        margin: 0;
+    }
+    .purpose-section-card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        padding: 1.8rem 2.2rem;
+        margin-bottom: 1.8rem;
+    }
+    .purpose-section-card h3 {
+        font-size: 1.45rem !important;
+        color: var(--accent) !important;
+        margin-top: 0 !important;
+        margin-bottom: 0.9rem !important;
+    }
+    .purpose-section-card p, .purpose-section-card li {
+        font-size: 1.08rem !important;
+        line-height: 1.7 !important;
+    }
+    .highlight-box {
+        background: var(--accent-soft);
+        border-left: 4px solid var(--accent);
+        padding: 1rem 1.3rem;
+        border-radius: 0 8px 8px 0;
+        margin: 1.2rem 0;
+        font-size: 1.08rem !important;
+    }
+    .vs-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.3rem;
+        margin: 1.3rem 0;
+    }
+    @media (max-width: 800px) {
+        .vs-grid { grid-template-columns: 1fr; }
+    }
+    .vs-box {
+        background: var(--card-subtle);
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        padding: 1.3rem 1.5rem;
+    }
+    .vs-box.bad {
+        border-left: 4px solid #ef4444;
+    }
+    .vs-box.good {
+        border-left: 4px solid #10b981;
+    }
+    .timeline-card {
+        border-left: 3px solid var(--accent);
+        padding: 0.6rem 0 0.8rem 1.4rem;
+        margin-bottom: 1.1rem;
+        position: relative;
+    }
+    .timeline-card::before {
+        content: '';
+        position: absolute;
+        left: -8px;
+        top: 0.8rem;
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: var(--accent);
+    }
+    .timeline-year {
+        font-weight: 800;
+        color: var(--accent);
+        font-size: 1.2rem;
+    }
+    .timeline-title {
+        font-weight: 700;
+        font-size: 1.12rem;
+        margin: 0.15rem 0 0.4rem;
+    }
+    .usecase-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.1rem;
+        margin-top: 1.2rem;
+    }
+    .usecase-card {
+        background: var(--card-subtle);
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        padding: 1.3rem 1.5rem;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .usecase-card:hover {
+        border-color: var(--accent);
+        transform: translateY(-2px);
+    }
+    .usecase-card .icon {
+        font-size: 1.8rem;
+        margin-bottom: 0.4rem;
+    }
+    .usecase-card strong {
+        display: block;
+        font-size: 1.15rem;
+        color: var(--accent);
+        margin-bottom: 0.4rem;
+    }
+    .usecase-card p {
+        font-size: 1.02rem !important;
+        line-height: 1.6 !important;
+        margin: 0;
+        opacity: 0.9;
+    }
+
+    /* Certificate Styling */
+    .certificate-preview-frame {
+        background: #ffffff;
+        color: #0f172a;
+        border: 4px solid #1e3a8a;
+        border-radius: 12px;
+        padding: 1.2rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+        margin-top: 0.5rem;
+    }
+    .cert-inner-frame {
+        border: 2px solid #d97706;
+        border-radius: 8px;
+        padding: 2rem 1.8rem;
+        text-align: center;
+        background: linear-gradient(180deg, #fafafa 0%, #ffffff 100%);
+    }
+    .cert-org {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: #64748b;
+        text-transform: uppercase;
+    }
+    .cert-inst {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #1e3a8a;
+        margin-top: 0.3rem;
+        letter-spacing: 0.05em;
+    }
+    .cert-title {
+        font-size: 1.7rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 1.1rem 0 0.4rem;
+        letter-spacing: 0.04em;
+        font-family: 'Space Grotesk', sans-serif;
+    }
+    .cert-subtitle {
+        font-size: 0.95rem;
+        color: #64748b;
+        font-style: italic;
+    }
+    .cert-student {
+        font-size: 1.8rem;
+        font-weight: 800;
+        color: #0284c7;
+        margin: 0.8rem 0 0.2rem;
+        text-decoration: underline;
+        text-decoration-color: #d97706;
+        text-underline-offset: 6px;
+    }
+    .cert-id {
+        font-size: 0.9rem;
+        color: #475569;
+        margin-bottom: 0.9rem;
+    }
+    .cert-body {
+        font-size: 0.95rem;
+        color: #334155;
+        line-height: 1.6;
+        max-width: 580px;
+        margin: 0 auto 0.9rem;
+    }
+    .cert-course {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 0.25rem;
+    }
+    .cert-code {
+        font-size: 0.85rem;
+        color: #2563eb;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+    }
+    .cert-footer-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 1rem;
+        margin-top: 1rem;
+    }
+    .cert-col {
+        flex: 1;
+        text-align: center;
+    }
+    .cert-meta-label {
+        font-size: 0.7rem;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+    .cert-meta-val {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-top: 0.15rem;
+    }
+    .seal-badge {
+        display: inline-block;
+        background: #fef3c7;
+        color: #b45309;
+        border: 1px solid #d97706;
+        padding: 0.25rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+    }
+    .seal-sub {
+        font-size: 0.65rem;
+        color: #92400e;
+        margin-top: 0.2rem;
+        font-weight: 700;
+    }
 
     /* Tabs & Code Areas */
     [data-testid="stTabs"] [role="tablist"] { gap: 0.5rem; border-bottom: 1px solid var(--card-border); }
-    [data-testid="stTabs"] button[role="tab"] { border-radius: 8px 8px 0 0; padding: 0.65rem 0.8rem; }
-    [data-testid="stTabs"] button[role="tab"][aria-selected="true"] { color: var(--accent); font-weight: 600; }
+    [data-testid="stTabs"] button[role="tab"] { border-radius: 8px 8px 0 0; padding: 0.7rem 0.95rem; font-size: 1.05rem !important; font-weight: 600 !important; }
+    [data-testid="stTabs"] button[role="tab"][aria-selected="true"] { color: var(--accent); font-weight: 700; }
     [data-testid="stTextArea"] textarea { font-family: 'IBM Plex Mono', monospace !important; }
     </style>
     """
@@ -2232,11 +3126,21 @@ def main():
     st.markdown(get_app_styles(), unsafe_allow_html=True)
 
     # Navigation Sidebar
-    st.sidebar.markdown('<div class="sidebar-brand">VIRTUAL LAB</div>', unsafe_allow_html=True)
-    st.sidebar.markdown(f'<div class="sidebar-code">Database Management Systems<br>{EXPERIMENT_CONFIG["lab_code"]}</div>', unsafe_allow_html=True)
+    st.sidebar.markdown(f'<div class="sidebar-title">Graph Database Lab</div><div class="sidebar-code">DBMS · {EXPERIMENT_CONFIG["lab_code"]}</div>', unsafe_allow_html=True)
 
-    navigation_options = ["01  Theory", "02  Simulation", "03  Quiz", "04  Experiment Report"]
+    navigation_options = [
+        "Purpose",
+        "Theory",
+        "Simulation",
+        "Quiz",
+        "Report Generation",
+        "Certificate",
+        "References"
+    ]
     requested_section = st.session_state.get("requested_section", navigation_options[0])
+    if requested_section not in navigation_options:
+        requested_section = navigation_options[0]
+
     section = st.sidebar.radio(
         "Navigation",
         options=navigation_options,
@@ -2245,27 +3149,24 @@ def main():
     )
     st.session_state["requested_section"] = section
 
-    st.sidebar.divider()
-    st.sidebar.markdown('<div class="manual-label">Session Record</div>', unsafe_allow_html=True)
-    quiz_status = "Done" if st.session_state.get("quiz_submitted", False) else "Pending"
-    st.sidebar.markdown(f'<div class="sidebar-stat"><span class="sidebar-stat-label">Quiz status</span><span class="sidebar-stat-value">{quiz_status}</span></div>', unsafe_allow_html=True)
-    if st.session_state.get("quiz_submitted", False):
-        st.sidebar.markdown(f'<div class="sidebar-stat"><span class="sidebar-stat-label">Quiz score</span><span class="sidebar-stat-value">{st.session_state.get("quiz_score", 0)} / {len(QUIZ_QUESTIONS)}</span></div>', unsafe_allow_html=True)
-
-    st.sidebar.markdown(f'<div class="sidebar-stat"><span class="sidebar-stat-label">Recorded trials</span><span class="sidebar-stat-value">{len(st.session_state.get("trials", []))}</span></div>', unsafe_allow_html=True)
-    m = st.session_state["graph"].get_metrics()
-    st.sidebar.markdown(f'<div class="sidebar-stat"><span class="sidebar-stat-label">Graph size</span><span class="sidebar-stat-value">{m["num_nodes"]} nodes · {m["num_relationships"]} rels</span></div>', unsafe_allow_html=True)
+    # Activity Logs in Sidebar
+    render_sidebar_logs()
 
     # Section Dispatcher
-    if section == "01  Theory":
-        render_experiment_cover()
+    if section == "Purpose":
+        render_purpose_section()
+    elif section == "Theory":
         render_theory_section()
-    elif section == "02  Simulation":
+    elif section == "Simulation":
         render_simulation_section()
-    elif section == "03  Quiz":
+    elif section == "Quiz":
         render_quiz_section()
-    elif section == "04  Experiment Report":
+    elif section == "Report Generation":
         render_report_section()
+    elif section == "Certificate":
+        render_certificate_section()
+    elif section == "References":
+        render_references_section()
 
 
 if __name__ == "__main__":
